@@ -1,0 +1,589 @@
+/* 角色DNA记录器 · 智绘姬扩展 —— 面板样式（跟随酒馆主题变量） */
+
+#dna-tab.dna-wrap {
+    padding: 4px 2px 40px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--SmartThemeBodyColor, #e6e6e6);
+}
+
+#dna-tab .dna-hero {
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .3));
+    border-radius: 14px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    background: linear-gradient(135deg, rgba(78, 161, 255, .14), rgba(160, 120, 255, .10));
+}
+
+#dna-tab .dna-hero-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .5px;
+}
+
+#dna-tab .dna-hero-sub {
+    font-size: 12.5px;
+    opacity: .72;
+    margin-top: 4px;
+}
+
+#dna-tab .dna-hero-status {
+    margin-top: 10px;
+    font-size: 12px;
+    opacity: .8;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#dna-tab .dna-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #43d17a;
+    box-shadow: 0 0 8px #43d17a;
+    display: inline-block;
+}
+
+#dna-tab .dna-sep { opacity: .4; }
+
+#dna-tab .dna-card {
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .25));
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: rgba(128, 128, 128, .06);
+}
+
+#dna-tab .dna-card-h {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#dna-tab .dna-card-h::before {
+    content: "";
+    width: 4px;
+    height: 15px;
+    border-radius: 2px;
+    background: var(--SmartThemeQuoteColor, #4ea1ff);
+}
+
+#dna-tab .dna-count {
+    font-size: 11px;
+    font-weight: 500;
+    opacity: .7;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .4));
+    border-radius: 10px;
+    padding: 0 7px;
+}
+
+#dna-tab .dna-badge {
+    font-size: 12px;
+    border: 1px solid var(--SmartThemeQuoteColor, #4ea1ff);
+    color: var(--SmartThemeQuoteColor, #4ea1ff);
+    border-radius: 8px;
+    padding: 1px 9px;
+    max-width: 46%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#dna-tab .dna-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+#dna-tab .dna-row-tight { margin-bottom: 6px; }
+
+#dna-tab .dna-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
+#dna-tab .dna-check input { width: 15px; height: 15px; margin: 0; }
+
+#dna-tab .dna-label {
+    display: block;
+    font-size: 12px;
+    opacity: .7;
+    margin: 10px 0 4px;
+}
+
+#dna-tab .dna-grid2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+}
+
+#dna-tab input[type="text"],
+#dna-tab input[type="password"],
+#dna-tab input[type="number"] {
+    width: 100%;
+    min-height: 38px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .4));
+    background: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, .2));
+    color: inherit;
+    box-sizing: border-box;
+    font-size: 13px;
+}
+
+#dna-tab .dna-hint {
+    font-size: 12px;
+    opacity: .62;
+    margin-top: 6px;
+}
+
+/* ---------- LLM 配置选择 + 明细 ---------- */
+#dna-tab .dna-model-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+    flex-wrap: wrap;
+}
+
+#dna-tab .dna-select {
+    flex: 1 1 200px;
+    min-width: 0;
+    min-height: 38px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .4));
+    background: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, .2));
+    color: inherit;
+    box-sizing: border-box;
+    font-size: 13px;
+}
+
+#dna-tab .dna-kv {
+    margin-top: 12px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .25));
+    border-radius: 10px;
+    overflow: hidden;
+    font-size: 12.5px;
+}
+
+#dna-tab .dna-kv:empty { display: none; }
+
+#dna-tab .dna-kv-row {
+    display: grid;
+    grid-template-columns: 116px 1fr;
+    gap: 10px;
+    padding: 6px 10px;
+    border-top: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .18));
+}
+
+#dna-tab .dna-kv-row:first-child { border-top: none; }
+
+#dna-tab .dna-kv-k { opacity: .6; }
+
+#dna-tab .dna-kv-v {
+    word-break: break-all;
+    white-space: pre-wrap;
+    font-family: var(--monoFontFamily, ui-monospace, Consolas, monospace);
+    font-size: 12px;
+}
+
+/* ---------- 正则 & 测试工具 ---------- */
+#dna-tab .dna-textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .4));
+    background: var(--SmartThemeBlurTintColor, rgba(0, 0, 0, .2));
+    color: inherit;
+    box-sizing: border-box;
+    font-size: 13px;
+    line-height: 1.55;
+    resize: vertical;
+    font-family: inherit;
+}
+
+#dna-tab .dna-textarea.dna-mono {
+    font-family: var(--monoFontFamily, ui-monospace, Consolas, monospace);
+    font-size: 12px;
+}
+
+#dna-tab .dna-textarea[readonly] { opacity: .85; }
+
+#dna-tab .dna-textarea:focus {
+    outline: none;
+    border-color: var(--SmartThemeQuoteColor, #7aa2f7);
+}
+
+#dna-tab .dna-hint-inline { margin: 0; }
+
+#dna-tab .dna-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+#dna-tab .dna-btn {
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .45));
+    background: rgba(128, 128, 128, .12);
+    color: inherit;
+    cursor: pointer;
+    font-size: 13px;
+    transition: .15s;
+}
+
+#dna-tab .dna-btn:hover { background: rgba(128, 128, 128, .22); }
+
+#dna-tab .dna-btn-primary {
+    border-color: var(--SmartThemeQuoteColor, #4ea1ff);
+    background: rgba(78, 161, 255, .18);
+    font-weight: 600;
+}
+
+#dna-tab .dna-btn:disabled { opacity: .55; cursor: not-allowed; }
+
+/* ---------- 档案列表 ---------- */
+#dna-tab .dna-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    max-height: 240px;
+    overflow: auto;
+    margin-top: 10px;
+}
+
+#dna-tab .dna-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .3));
+    border-radius: 8px;
+    padding: 5px 9px;
+    font-size: 13px;
+    background: rgba(128, 128, 128, .07);
+    cursor: pointer;
+    transition: .15s;
+}
+
+#dna-tab .dna-item:hover { background: rgba(128, 128, 128, .16); }
+
+#dna-tab .dna-item-active {
+    border-color: var(--SmartThemeQuoteColor, #4ea1ff);
+    background: rgba(78, 161, 255, .14);
+}
+
+#dna-tab .dna-item-name {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#dna-tab .dna-item-time {
+    font-size: 11px;
+    opacity: .5;
+    flex: 0 0 auto;
+}
+
+#dna-tab .dna-mini {
+    flex: 0 0 auto;
+    font-size: 11px;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--SmartThemeBorderColor, rgba(128, 128, 128, .4));
+    background: transparent;
+    color: inherit;
+    opacity: .75;
+    cursor: pointer;
+}
+
+#dna-tab .dna-mini:hover { opacity: 1; background: rgba(128, 128, 128, .18); }
+
+#dna-tab .dna-mini-del:hover {
+    color: #ff6b6b;
+    border-color: #ff6b6b;
+    background: rgba(255, 107, 107, .12);
+}
+
+/* ---------- 详情 ---------- */
+#dna-tab .dna-detail {
+    margin-top: 12px;
+    border-top: 1px dashed var(--SmartThemeBorderColor, rgba(128, 128, 128, .35));
+    padding-top: 10px;
+}
+
+#dna-tab .dna-detail-h {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 13.5px;
+    margin-bottom: 8px;
+}
+
+#dna-tab .dna-detail-time {
+    font-size: 11px;
+    font-weight: 400;
+    opacity: .5;
+    flex: 1 1 auto;
+}
+
+#dna-tab .dna-field { margin-bottom: 9px; }
+
+#dna-tab .dna-field-h {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    opacity: .75;
+    margin-bottom: 3px;
+}
+
+#dna-tab .dna-field-v {
+    font-size: 12.5px;
+    font-family: ui-monospace, Consolas, monospace;
+    line-height: 1.65;
+    background: rgba(0, 0, 0, .2);
+    border-radius: 7px;
+    padding: 7px 9px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 220px;
+    overflow: auto;
+}
+
+#dna-tab .dna-empty {
+    font-size: 12.5px;
+    opacity: .6;
+}
+
+#dna-tab .dna-empty-inline { opacity: .45; }
+
+/* ---------- 日志 ---------- */
+#dna-tab .dna-log {
+    height: 190px;
+    overflow: auto;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.55;
+    background: rgba(0, 0, 0, .18);
+    border-radius: 8px;
+    padding: 8px 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+#dna-tab .dna-log-line { opacity: .85; }
+
+/* 兜底：JS 还没挂上 dna-mobile 类而屏幕又很窄时，至少别挤成两列 */
+@media (max-width: 640px) {
+    #dna-tab:not(.dna-desktop) .dna-grid2 { grid-template-columns: 1fr; }
+    #dna-tab:not(.dna-desktop) .dna-actions .dna-btn { flex: 1 1 100%; }
+}
+
+/* ==========================================================================
+   手机版：由 JS 给 #dna-tab 挂 .dna-mobile（自动检测或手动锁定）
+   目标——单列、大按钮、不缩小、不横向溢出
+   ========================================================================== */
+#dna-tab.dna-mobile {
+    padding: 2px 0 56px;
+    font-size: 15px;
+    -webkit-text-size-adjust: 100%;
+}
+
+#dna-tab.dna-mobile .dna-hero {
+    padding: 13px 14px;
+    border-radius: 12px;
+    margin-bottom: 11px;
+}
+
+#dna-tab.dna-mobile .dna-hero-title { font-size: 16.5px; }
+
+#dna-tab.dna-mobile .dna-hero-sub {
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+#dna-tab.dna-mobile .dna-hero-status {
+    font-size: 11.5px;
+    flex-wrap: wrap;
+}
+
+#dna-tab.dna-mobile .dna-card {
+    padding: 12px 13px;
+    border-radius: 11px;
+    margin-bottom: 11px;
+}
+
+#dna-tab.dna-mobile .dna-card-h { font-size: 14.5px; }
+
+/* 勾选项：一行一个，点得着 */
+#dna-tab.dna-mobile .dna-row {
+    display: block;
+    margin-bottom: 4px;
+}
+
+#dna-tab.dna-mobile .dna-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 2px 0;
+    font-size: 14.5px;
+    box-sizing: border-box;
+}
+
+#dna-tab.dna-mobile .dna-check input {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 auto;
+}
+
+#dna-tab.dna-mobile .dna-label {
+    font-size: 12.5px;
+    margin: 12px 0 5px;
+}
+
+/* 一律单列 */
+#dna-tab.dna-mobile .dna-grid2 { grid-template-columns: 1fr; }
+
+/* 输入控件：16px 起步，免得 iOS 自动放大页面 */
+#dna-tab.dna-mobile input[type="text"],
+#dna-tab.dna-mobile input[type="password"],
+#dna-tab.dna-mobile input[type="number"],
+#dna-tab.dna-mobile .dna-select {
+    min-height: 46px;
+    font-size: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+#dna-tab.dna-mobile .dna-select { flex: 1 1 100%; }
+
+#dna-tab.dna-mobile .dna-textarea {
+    min-height: 46px;
+    font-size: 15px;
+    line-height: 1.6;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+#dna-tab.dna-mobile .dna-textarea.dna-mono { font-size: 13px; }
+
+/* 按钮：整行宽、够高 */
+#dna-tab.dna-mobile .dna-actions {
+    gap: 9px;
+    margin-top: 12px;
+}
+
+#dna-tab.dna-mobile .dna-btn {
+    flex: 1 1 100%;
+    min-height: 48px;
+    font-size: 15px;
+    border-radius: 10px;
+    padding: 0 16px;
+}
+
+/* 键值表：标签一行、值一行 */
+#dna-tab.dna-mobile .dna-kv { font-size: 13px; }
+
+#dna-tab.dna-mobile .dna-kv-row {
+    grid-template-columns: 1fr;
+    gap: 3px;
+    padding: 8px 11px;
+}
+
+#dna-tab.dna-mobile .dna-kv-v { font-size: 13px; }
+
+#dna-tab.dna-mobile .dna-badge {
+    max-width: 100%;
+    font-size: 12.5px;
+    padding: 2px 10px;
+}
+
+#dna-tab.dna-mobile .dna-hint {
+    font-size: 12.5px;
+    line-height: 1.6;
+}
+
+/* 档案列表 */
+#dna-tab.dna-mobile .dna-list {
+    max-height: 46vh;
+    gap: 7px;
+    margin-top: 11px;
+}
+
+#dna-tab.dna-mobile .dna-item {
+    min-height: 48px;
+    padding: 8px 11px;
+    font-size: 14.5px;
+    border-radius: 10px;
+    gap: 9px;
+}
+
+#dna-tab.dna-mobile .dna-item-time { font-size: 11px; }
+
+#dna-tab.dna-mobile .dna-mini {
+    min-height: 36px;
+    min-width: 44px;
+    padding: 0 10px;
+    font-size: 12.5px;
+    border-radius: 8px;
+}
+
+/* 详情 */
+#dna-tab.dna-mobile .dna-detail { padding-top: 12px; }
+
+#dna-tab.dna-mobile .dna-detail-h {
+    font-size: 14.5px;
+    flex-wrap: wrap;
+    gap: 6px 9px;
+}
+
+#dna-tab.dna-mobile .dna-detail-time { flex: 1 1 100%; }
+
+#dna-tab.dna-mobile .dna-field { margin-bottom: 12px; }
+
+#dna-tab.dna-mobile .dna-field-h {
+    font-size: 12.5px;
+    flex-wrap: wrap;
+    gap: 6px 9px;
+}
+
+#dna-tab.dna-mobile .dna-field-v {
+    font-size: 13px;
+    line-height: 1.7;
+    max-height: 40vh;
+    padding: 9px 11px;
+    border-radius: 9px;
+}
+
+/* 日志 */
+#dna-tab.dna-mobile .dna-log {
+    height: 34vh;
+    font-size: 12.5px;
+    line-height: 1.6;
+    padding: 9px 11px;
+}
+
+/* 横屏手机：把纵向留白收一收 */
+@media (max-height: 500px) and (orientation: landscape) {
+    #dna-tab.dna-mobile .dna-list { max-height: 60vh; }
+    #dna-tab.dna-mobile .dna-log { height: 50vh; }
+    #dna-tab.dna-mobile .dna-field-v { max-height: 60vh; }
+}
