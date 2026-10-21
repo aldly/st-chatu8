@@ -57440,7 +57440,7 @@ var init_avatarConfig = __esm({
     init_config();
     DEFAULT_AVATARS = {
       // 人设默认头像（智绘姬头像）
-      persona: `${extensionFolderPath}/html/settings/chatu8-avatar.png`,
+      persona: `${extensionFolderPath}/html/settings/\u667A\u7ED8\u59EC\u5934\u50CF.png`,
       // User 默认头像
       user: `${extensionFolderPath}/html/settings/default-user-avatar.png`
     };
@@ -80950,7 +80950,7 @@ function initAiAssistant(modal) {
       return;
     }
     const chatBody = dom.chatBody;
-    const icon = '<img src="/scripts/extensions/third-party/st-chatu8/html/settings/chatu8-avatar.png" alt="\u667A\u7ED8\u59EC" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">';
+    const icon = '<img src="/scripts/extensions/third-party/st-chatu8/html/settings/\u667A\u7ED8\u59EC\u5934\u50CF.png" alt="\u667A\u7ED8\u59EC" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">';
     const messageHtml = `
             <div class="st-chatu8-ai-msg system-msg">
                 <div class="msg-avatar">${icon}</div>

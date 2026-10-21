@@ -10,6 +10,38 @@
     color: var(--st-chatu8-text-primary, inherit);
     font-size: 1rem;
     line-height: 1.6;
+
+    /* DNA 用到的派生色。
+       accent 系列全部由智绘姬主题的 --st-chatu8-accent-primary 推导，
+       换主题时这边跟着一起变，不会再出现「本体橙色、DNA 还是蓝色」的割裂感。
+       color-mix 前面都留了 rgba 兜底，老浏览器也不会掉色。 */
+    --dna-accent: var(--st-chatu8-accent-primary, #3b82f6);
+    --dna-accent-soft: rgba(59, 130, 246, 0.18);
+    --dna-accent-line: rgba(59, 130, 246, 0.55);
+    --dna-accent-glow: rgba(59, 130, 246, 0.22);
+    --dna-ok: #2f9e63;
+    --dna-ok-soft: rgba(34, 197, 94, 0.16);
+    --dna-ok-line: rgba(34, 197, 94, 0.55);
+    --dna-warn: var(--st-chatu8-warn-color, #f0b429);
+    --dna-warn-soft: rgba(240, 180, 41, 0.16);
+    --dna-warn-line: rgba(240, 180, 41, 0.55);
+    --dna-err: var(--st-chatu8-danger-primary, #dc3545);
+    --dna-err-soft: rgba(220, 53, 69, 0.16);
+    --dna-err-line: rgba(220, 53, 69, 0.55);
+}
+
+@supports (color: color-mix(in srgb, red 50%, transparent)) {
+    #st-chatu8-settings #dna-tab {
+        --dna-accent-soft: color-mix(in srgb, var(--dna-accent) 18%, transparent);
+        --dna-accent-line: color-mix(in srgb, var(--dna-accent) 55%, transparent);
+        --dna-accent-glow: color-mix(in srgb, var(--dna-accent) 22%, transparent);
+        --dna-ok-soft: color-mix(in srgb, var(--dna-ok) 16%, transparent);
+        --dna-ok-line: color-mix(in srgb, var(--dna-ok) 55%, transparent);
+        --dna-warn-soft: color-mix(in srgb, var(--dna-warn) 16%, transparent);
+        --dna-warn-line: color-mix(in srgb, var(--dna-warn) 55%, transparent);
+        --dna-err-soft: color-mix(in srgb, var(--dna-err) 16%, transparent);
+        --dna-err-line: color-mix(in srgb, var(--dna-err) 55%, transparent);
+    }
 }
 
 /* 智绘姬的 grid 默认 24px 间距在设置项多的时候太散，这里收紧 */
@@ -87,7 +119,7 @@
 
 #st-chatu8-settings #dna-tab .dna-dot.dna-dot-on {
     background: var(--st-chatu8-accent-primary, #3b82f6);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.22);
+    box-shadow: 0 0 0 3px var(--dna-accent-glow);
 }
 
 #st-chatu8-settings #dna-tab .dna-dot.dna-dot-busy {
@@ -174,6 +206,21 @@
     gap: 8px;
     flex-wrap: wrap;
     margin: 0;
+}
+
+/* 使用说明：是个 <a>，但长得和旁边的按钮一样（本体的 .st-chatu8-btn 本来是给 button 的） */
+#st-chatu8-settings #dna-tab .dna-help-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    text-decoration: none;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+#st-chatu8-settings #dna-tab .dna-help-btn:hover {
+    text-decoration: none;
 }
 
 #st-chatu8-settings #dna-tab .dna-sec-actions .st-chatu8-btn i {
@@ -538,7 +585,7 @@
 
 /* 档案锁：锁住的档案在列表里淡淡标一下，小锁图标变金色 */
 #st-chatu8-settings #dna-tab .dna-item-locked {
-    background: rgba(240, 180, 41, 0.07);
+    background: var(--dna-warn-soft);
 }
 
 #st-chatu8-settings #dna-tab .dna-lock-ico {
@@ -553,7 +600,7 @@
 
 #st-chatu8-settings #dna-tab .dna-mini-lock.is-locked {
     color: var(--st-chatu8-warn-color, #f0b429);
-    border-color: rgba(240, 180, 41, 0.55);
+    border-color: var(--dna-warn-line);
 }
 
 #st-chatu8-settings #dna-tab .dna-mini-dis {
@@ -561,9 +608,34 @@
     cursor: not-allowed;
 }
 
+/* AI 回复（实时）的状态徽章 */
+#st-chatu8-settings #dna-tab .dna-badge-live {
+    border-color: var(--dna-accent-line);
+    background: var(--dna-accent-soft);
+    color: #60a5fa;
+    animation: dna-live-pulse 1.2s ease-in-out infinite;
+}
+
+#st-chatu8-settings #dna-tab .dna-badge-ok {
+    border-color: var(--dna-ok-line);
+    background: var(--dna-ok-soft);
+    color: #4ade80;
+}
+
+#st-chatu8-settings #dna-tab .dna-badge-err {
+    border-color: var(--dna-err-line);
+    background: var(--dna-err-soft);
+    color: #f87171;
+}
+
+@keyframes dna-live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+}
+
 #st-chatu8-settings #dna-tab .dna-badge-warn {
-    border-color: rgba(240, 180, 41, 0.55);
-    background: rgba(240, 180, 41, 0.16);
+    border-color: var(--dna-warn-line);
+    background: var(--dna-warn-soft);
     color: var(--st-chatu8-warn-color, #f0b429);
 }
 
@@ -673,7 +745,10 @@
     overflow-y: auto;
     border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.35));
     border-radius: var(--st-chatu8-border-radius, 8px);
-    background: var(--st-chatu8-bg-primary, rgba(0, 0, 0, 0.15));
+    /* 与本体 .st-chatu8-preset-entries-container 一致：浅一层底 + 8px 内边距，
+       里面的条目才是一张张独立卡片 */
+    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.12));
+    padding: 8px;
     font-size: 0.92rem;
 }
 
@@ -689,24 +764,30 @@
     max-height: 72vh;
 }
 
+/* 单条条目：对齐本体 .st-chatu8-preset-entry —— 独立卡片、6px 圆角、hover 亮边框 */
 #st-chatu8-settings #dna-tab .dna-entry-item {
-    border-bottom: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.16));
+    background: var(--st-chatu8-bg-secondary, rgba(128, 128, 128, 0.1));
+    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.3));
+    border-radius: 6px;
+    margin-bottom: 8px;
+    transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 #st-chatu8-settings #dna-tab .dna-entry-item:last-child {
-    border-bottom: none;
+    margin-bottom: 0;
+}
+
+#st-chatu8-settings #dna-tab .dna-entry-item:hover {
+    border-color: var(--st-chatu8-accent-secondary, rgba(128, 128, 128, 0.6));
 }
 
 #st-chatu8-settings #dna-tab .dna-entry-line {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding-right: 12px;
+    padding-right: 10px;
     transition: background 0.16s;
-}
-
-#st-chatu8-settings #dna-tab .dna-entry-line:hover {
-    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.14));
+    border-radius: 6px;
 }
 
 #st-chatu8-settings #dna-tab .dna-entry {
@@ -715,8 +796,8 @@
     display: flex;
     align-items: center;
     gap: 14px;
-    padding: 13px 6px 13px 16px;
-    min-height: 48px;
+    padding: 11px 6px 11px 14px;
+    min-height: 44px;
     cursor: pointer;
     white-space: nowrap;
 }
@@ -1074,7 +1155,7 @@
     opacity: .85;
     vertical-align: middle;
 }
-.dna-form-tag.is-cur { background: rgba(64, 170, 110, .22); color: #2f9e63; opacity: 1; }
+.dna-form-tag.is-cur { background: var(--dna-ok-soft); color: var(--dna-ok); opacity: 1; }
 .dna-form-tag.is-seal { background: rgba(226, 80, 74, .18); color: #c8463f; opacity: 1; }
 .dna-item-form .dna-item-name { font-size: 12.5px; }
 .dna-form-line {
@@ -1091,215 +1172,183 @@
 }
 .dna-form-line i { opacity: .7; }
 .dna-form-tip { margin-left: 6px; opacity: .62; font-size: 11.5px; }
-.dna-mini-cur { margin-left: 8px; border-color: rgba(64, 170, 110, .5); color: #2f9e63; }
+.dna-mini-cur { margin-left: 8px; border-color: var(--dna-ok-line); color: var(--dna-ok); }
 .dna-mini-cur:disabled { opacity: .45; }
 
-/* ==================== 可折叠板块（LLM 配置 / 上下文预设） ==================== */
-#st-chatu8-settings #dna-tab .dna-fold-head {
-    cursor: pointer;
-    user-select: none;
-}
-
-#st-chatu8-settings #dna-tab .dna-fold-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border-radius: 6px;
-    cursor: pointer;
-    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.4));
-    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.14));
-    color: var(--st-chatu8-text-secondary, inherit);
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-#st-chatu8-settings #dna-tab .dna-fold-btn:hover {
-    background: var(--st-chatu8-accent-primary, #3b82f6);
-    color: var(--st-chatu8-text-highlight, #fff);
-    border-color: var(--st-chatu8-accent-primary, #3b82f6);
-}
-
-#st-chatu8-settings #dna-tab .dna-fold-btn i {
-    transition: transform 0.18s ease;
-}
-
-#st-chatu8-settings #dna-tab .dna-fold.dna-folded .dna-fold-btn i {
-    transform: rotate(180deg);
-}
-
-#st-chatu8-settings #dna-tab .dna-fold.dna-folded .dna-fold-body {
-    display: none;
-}
-
-#st-chatu8-settings #dna-tab .dna-fold.dna-folded .dna-sec-head {
-    border-bottom: none;
-    margin-bottom: 0;
-    padding-bottom: 0;
-}
-
-#st-chatu8-settings #dna-tab .dna-fold.dna-folded .dna-fold-head h3::after {
-    content: '（已收起）';
-    font-size: 0.75rem;
-    font-weight: 400;
-    opacity: 0.5;
-    margin-left: 6px;
-}
-
-/* ==================== 编辑悬浮窗（挂在 body 上，自己带一套样式） ==================== */
-.dna-modal {
+/* ==========================================================================
+   悬浮字幕：贴在屏幕最上方，挂在 body 上
+   不能用 #st-chatu8-settings #dna-tab 前缀——那样只能在设置弹窗里显示
+   ========================================================================== */
+.dna-banner {
     position: fixed;
-    inset: 0;
-    z-index: 100001;
+    top: max(14px, env(safe-area-inset-top, 14px));
+    left: 50%;
+    z-index: 2147483000;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 20px;
-}
-
-.dna-modal-mask {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-}
-
-.dna-modal-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    width: min(900px, 96vw);
-    max-height: 88vh;
-    border-radius: 10px;
-    overflow: hidden;
-    background: var(--st-chatu8-bg-secondary, #22272e);
-    color: var(--st-chatu8-text-primary, #e8e8e8);
-    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.4));
-    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
-}
-
-.dna-modal-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 13px 18px;
-    border-bottom: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.3));
-}
-
-.dna-modal-title {
-    font-size: 1.02rem;
+    gap: 9px;
+    max-width: calc(100vw - 32px);
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-size: 0.95rem;
     font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: 0.02em;
+    color: #fff;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-50%) translateY(-140%);
+    transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.15), opacity 0.3s ease;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
 }
 
-.dna-modal-x {
-    border: none;
+.dna-banner.dna-banner-show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+
+.dna-banner i {
+    font-size: 1rem;
+    opacity: 0.95;
+}
+
+/* 建档中：主题强调色 + 呼吸（跟着智绘姬主题走，不再是固定的蓝） */
+.dna-banner-run {
+    background: linear-gradient(135deg,
+        var(--st-chatu8-accent-secondary, #1d4ed8),
+        var(--st-chatu8-accent-primary, #3b82f6));
+    animation: dna-banner-breathe 1.4s ease-in-out infinite;
+}
+
+/* 建档成功：绿色 */
+.dna-banner-ok {
+    background: linear-gradient(135deg, #15803d, #22c55e);
+}
+
+/* 建档失败：红色 */
+.dna-banner-err {
+    background: linear-gradient(135deg, #b91c1c, #ef4444);
+}
+
+@keyframes dna-banner-breathe {
+    0%, 100% { box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38); }
+    50% { box-shadow: 0 8px 34px rgba(0, 0, 0, 0.58); }
+}
+
+/* ==========================================================================
+   可折叠区块：LLM 配置 / 上下文预设
+   结构、标题、箭头、hover 全部复用智绘姬本体的 .st-chatu8-collapsible-section
+   （main.css），这里只补 DNA 自己需要的一点收尾。
+   ========================================================================== */
+#st-chatu8-settings #dna-tab .st-chatu8-collapsible-section .st-chatu8-section-header {
+    /* 本体的 h3 是 1.25rem，DNA 这边标题层级浅一些，对齐面板里其他 h3 */
+    font-size: 1rem;
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-collapsible-section .st-chatu8-section-header h3 {
+    font-size: 1.05rem;
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-collapsible-section .st-chatu8-section-toggle-icon {
+    font-size: 0.9rem;
+}
+
+/* ==========================================================================
+   悬浮窗：编辑字段 / 编辑预设条目
+   遮罩、对话框、标题、按钮全部复用智绘姬本体的 .st-chatu8-edit-*
+   （modals.css，全局生效，不依赖 #st-chatu8-settings 前缀）。
+   这里只补 DNA 自己的内容区布局。
+   ========================================================================== */
+.st-chatu8-edit-backdrop .st-chatu8-edit-dialog {
+    /* 本体的 dialog 是 flex 纵向 + gap 15px，这里让内容区自己滚 */
+    gap: 12px;
+}
+
+.st-chatu8-edit-backdrop .dna-modal-title {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding-right: 26px;
+    text-align: center;
+}
+
+.st-chatu8-edit-backdrop .dna-modal-x {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border: 0;
+    border-radius: 6px;
     background: transparent;
     color: inherit;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
     line-height: 1;
-    padding: 0 4px;
     cursor: pointer;
-    opacity: 0.65;
+    opacity: 0.6;
+    transition: opacity 0.2s, background-color 0.2s;
 }
 
-.dna-modal-x:hover {
+.st-chatu8-edit-backdrop .dna-modal-x:hover {
     opacity: 1;
-    color: var(--st-chatu8-danger-primary, #ff6b6b);
+    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.22));
 }
 
-.dna-modal-body {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    padding: 16px 18px;
-    overflow: auto;
+.st-chatu8-edit-backdrop .dna-modal-b {
     flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
-.dna-modal-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.dna-modal-lab {
+.st-chatu8-edit-backdrop .dna-modal-b label {
+    display: block;
+    margin-bottom: 6px;
     font-size: 0.86rem;
-    color: var(--st-chatu8-text-secondary, #a9b1ba);
+    color: var(--st-chatu8-text-secondary, inherit);
 }
 
-.dna-modal-ctl {
-    width: 100%;
-    box-sizing: border-box;
-    padding: 9px 11px;
-    font-size: 0.92rem;
-    font-family: inherit;
-    color: inherit;
-    border-radius: 6px;
-    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.45));
-    background: var(--st-chatu8-bg-primary, rgba(0, 0, 0, 0.28));
+.st-chatu8-edit-backdrop .dna-modal-row {
+    margin-bottom: 12px;
 }
 
-.dna-modal-ctl:focus {
-    outline: none;
-    border-color: var(--st-chatu8-accent-primary, #3b82f6);
+.st-chatu8-edit-backdrop .dna-modal-field {
+    margin-bottom: 12px;
 }
 
-.dna-modal-ta {
-    min-height: 200px;
+.st-chatu8-edit-backdrop .dna-modal-field textarea {
+    min-height: 220px;
     resize: vertical;
-    line-height: 1.55;
 }
 
-.dna-modal-ta.dna-mono {
-    font-family: var(--st-chatu8-font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-    font-size: 0.86rem;
+.st-chatu8-edit-backdrop .dna-modal-tip {
+    margin-top: 6px;
+    font-size: 0.82rem;
+    opacity: 0.7;
 }
 
-.dna-modal-foot {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 12px 18px 16px;
-    border-top: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.3));
+.st-chatu8-edit-backdrop .dna-modal-foot {
+    margin-top: 0;
 }
 
-.dna-modal-btn {
-    padding: 9px 18px;
-    font-size: 0.9rem;
-    font-family: inherit;
-    border-radius: 6px;
-    cursor: pointer;
-    color: inherit;
-    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.45));
-    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.16));
-    transition: filter 0.15s ease;
-}
-
-.dna-modal-btn:hover {
-    filter: brightness(1.15);
-}
-
-.dna-modal-btn.primary {
-    border-color: var(--st-chatu8-accent-primary, #3b82f6);
-    background: var(--st-chatu8-accent-primary, #3b82f6);
-    color: var(--st-chatu8-text-highlight, #fff);
-}
-
-@media (max-width: 720px) {
-    .dna-modal {
+@media (max-width: 640px) {
+    .st-chatu8-edit-backdrop {
         padding: 10px;
     }
 
-    .dna-modal-card {
+    .st-chatu8-edit-backdrop .st-chatu8-edit-dialog {
         width: 100%;
-        max-height: 94vh;
+        max-width: 100%;
+        max-height: 88vh;
     }
 
-    .dna-modal-ta {
-        min-height: 150px;
+    .st-chatu8-edit-backdrop .dna-modal-field textarea {
+        min-height: 160px;
     }
 }

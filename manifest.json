@@ -16,7 +16,7 @@
     "auto_update":  false,
     "fusion":  {
                    "base":  "st-chatu8 3.1.7 (AFPL v9, 从前跟你一样)",
-                   "dna":  "角色DNA记录器 2.9.7 (moran99123 + 上下文预设导入 / 条目逐条开关)",
+                   "dna":  "角色DNA记录器 2.9.5 (moran99123 + 上下文预设导入 / 条目逐条开关)",
                    "entry":  "index.js -\u003e chatu8.js + dna.js",
                    "note":  "角色DNA 已内置，无需单独安装 st-chatu8-dna；在线更新已改为提示，升级请整包替换。",
                    "built":  "2026-10-20"
