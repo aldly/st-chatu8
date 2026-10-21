@@ -4,6 +4,8 @@
  * 本文件是原扩展的构建产物（原 st-chatu8-dna/index.js）。
  * 字段规则已经内联在下方，不需要再跑构建脚本。
  *
+ * v2.9.9：折叠功能推倒重做（原来借用了智绘姬本体的折叠类，被本体在 document 上的委托点击又 toggle 一次，
+ *         一次点击 toggle 两下 = 点了没反应；现在换成 DNA 自己的类名 + 自己的点击委托 + 自己记状态）
  * v2.9.6：LLM 配置与上下文预设拆成「档案库 / 手动生成」两套（各选各的，互不影响）；
  *         正则 & 测试工具搬进档案库最下面；手动生成新增自己的测试工具（组装/试跑，不写档案）
  * v2.9.5：上下文预设支持导出 / 改名；内置默认预设「昆仑DNA档案记录版 · 九字段」首次安装自动装入
@@ -61,6 +63,9 @@ const DEFAULTS = {
     genPresetSeeded: false,    // 是否已做过「把档案库预设复制一份给手动生成」的一次性迁移
     seedPreset: '',            // 内置默认预设（档案库那份）装过没有（存文件名，装过就不再自动装）
     seedGenPreset: '',         // 内置默认预设（手动生成那份）装过没有
+    /* 折叠状态：{ libLLM, libPreset, genLLM, genPreset } → true = 收起。
+       DNA 自己记，不借智绘姬那套折叠状态（两边混用会互相打架）。 */
+    folds: {},
     /* LLM 配置：DNA 自己记一份选中的配置名。只读智绘姬那份配置列表，
        不写回智绘姬的 current_llm_profile，两边各选各的。 */
     llmProfile: '',            // 档案库（自动记录）用哪份 LLM 配置
@@ -153,6 +158,7 @@ function loadSettings() {
     if (typeof out.presetName !== 'string') out.presetName = '';
     if (typeof out.seedPreset !== 'string') out.seedPreset = '';
     if (typeof out.seedGenPreset !== 'string') out.seedGenPreset = '';
+    if (!out.folds || typeof out.folds !== 'object' || Array.isArray(out.folds)) out.folds = {};
     if (!['auto', 'desktop', 'mobile'].includes(out.uiMode)) out.uiMode = 'auto';
     /* v2.9.3 新增：LLM 配置独立 + 手动生成的选择 */
     if (typeof out.llmProfile !== 'string') out.llmProfile = '';
@@ -1587,83 +1593,44 @@ function renderPresetCard(scope) {
     renderPresetEntries(scope);
 }
 
-/* 条目列表：一条一行，勾掉就不参与组装（和智绘姬 LLM 页签里那些条目的开关一个意思）
-   每行右边有「编辑」按钮，点开就地改名称 / 角色 / 内容 */
 /* ------------------------------ 可折叠区块 ------------------------------ */
-/* LLM 配置 / 上下文预设这两块占地方，点标题就能收起来。
-   不重建 DOM：把标题之后的兄弟节点搬进一个 wrapper，收起来只是 display:none。 */
-function initCollapsibles(tab) {
+/* LLM 配置 / 上下文预设这两块占地方，点标题或右边箭头就能收起来。
+
+   为什么不借智绘姬本体那套 .st-chatu8-collapsible-section：
+   本体在 document 上挂了一个委托点击，凡是点 .st-chatu8-section-header 它自己会 toggle 一次
+   is-collapsed。DNA 这边要是也用同一个类名再挂一个监听，一次点击就被 toggle 两下——
+   等于没点，这就是「折叠点了没反应」的根因。所以这里用自己的一套类名（dna-fold / dna-fold-head），
+   本体的委托选择器压根匹配不到，两边井水不犯河水。
+
+   收起的表现：.dna-folded 让 head 之外的所有子元素 display:none（见 dna.css），
+   不用再包一层 body，静态 HTML 也不用跟着改结构。 */
+function applyFolds() {
+    const tab = document.querySelector('#dna-tab');
     if (!tab) return;
+    const f = (S.folds && typeof S.folds === 'object') ? S.folds : {};
+    tab.querySelectorAll('[data-fold]').forEach((sec) => {
+        sec.classList.toggle('dna-folded', !!f[sec.dataset.fold]);
+    });
+}
 
-    /* 事件委托：绑在 #dna-tab 上一次就够。
-       为什么不用给每个 header 单独绑——面板里的 section 有可能被外部重建
-       （智绘姬自己会重灌页签内容），单独绑的监听会跟着元素一起消失。
-       委托在 #dna-tab 上，只要这个容器还在，点击就一定有人接。 */
-    if (tab.dataset.dnaCollapseBound !== '1') {
-        tab.dataset.dnaCollapseBound = '1';
-        tab.addEventListener('click', (e) => {
-            const header = e.target.closest ? e.target.closest('.st-chatu8-section-header') : null;
-            if (!header) return;
-            /* 标题里要是放了按钮/输入框，别被折叠吞掉 */
-            if (e.target.closest && e.target.closest('button, a, input, select, textarea')) return;
-            const sec = header.closest('.st-chatu8-collapsible-section');
-            if (!sec) return;
-            const collapsed = sec.classList.toggle('is-collapsed');
-            header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        });
-        tab.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter' && e.key !== ' ') return;
-            const header = e.target.closest ? e.target.closest('.st-chatu8-section-header') : null;
-            if (!header) return;
-            e.preventDefault();
-            const sec = header.closest('.st-chatu8-collapsible-section');
-            if (!sec) return;
-            const collapsed = sec.classList.toggle('is-collapsed');
-            header.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
-        });
-    }
-
-    /* 结构改造：幂等，重复调用安全。
-       已经包在 .st-chatu8-section-header 里的跳过，所以不管调多少次都不会套娃。 */
-    tab.querySelectorAll('h3.dna-collapse-head').forEach((h3) => {
-        const sec = h3.parentElement;
+/* 点箭头或点标题都能收/展开。挂在 #dna-tab 上一次就够：
+   面板内容被外部重建也不影响，只要容器还在就有人接点击。 */
+function bindFoldClicks(tab) {
+    if (!tab || tab.dataset.foldBound === '1') return;
+    tab.dataset.foldBound = '1';
+    tab.addEventListener('click', (e) => {
+        const t = e.target;
+        const btn = t && t.closest ? t.closest('[data-fold-btn]') : null;
+        const head = t && t.closest ? t.closest('.dna-fold-head') : null;
+        if (!btn && !head) return;
+        const sec = (btn || head).closest('[data-fold]');
         if (!sec) return;
-        /* 已经改造过：h3 的父元素就是 header 了 */
-        if (h3.closest && h3.closest('.st-chatu8-section-header')) return;
-        if (sec.classList.contains('st-chatu8-collapsible-section') && sec.querySelector(':scope > .st-chatu8-section-body')) return;
-
-        /* 改造成智绘姬本体那套折叠结构（main.css 的 .st-chatu8-collapsible-section）：
-              <div class="st-chatu8-settings-section st-chatu8-collapsible-section">
-                <div class="st-chatu8-section-header"><h3>…</h3><span class="…section-toggle"><i/></span></div>
-                <div class="st-chatu8-section-body">…原来的内容…</div>
-              </div>
-           标题、箭头、圆角、hover 全都是本体现成的样式，不另造一套。 */
-        sec.classList.add('st-chatu8-collapsible-section');
-
-        const header = document.createElement('div');
-        header.className = 'st-chatu8-section-header';
-        header.setAttribute('role', 'button');
-        header.setAttribute('tabindex', '0');
-        header.setAttribute('aria-expanded', 'true');
-
-        const toggleBtn = document.createElement('span');
-        toggleBtn.className = 'st-chatu8-section-toggle';
-        toggleBtn.innerHTML = '<i class="fa-solid fa-chevron-down st-chatu8-section-toggle-icon"></i>';
-
-        /* 先把标题之后的所有内容搬进 body，再动标题本身 */
-        const body = document.createElement('div');
-        body.className = 'st-chatu8-section-body';
-        let n = h3.nextSibling;
-        while (n) {
-            const nx = n.nextSibling;
-            body.appendChild(n);
-            n = nx;
-        }
-
-        sec.insertBefore(header, h3);
-        header.appendChild(h3);
-        header.appendChild(toggleBtn);
-        sec.appendChild(body);
+        e.preventDefault();
+        const k = sec.dataset.fold;
+        if (!S.folds || typeof S.folds !== 'object') S.folds = {};
+        S.folds[k] = !S.folds[k];
+        sec.classList.toggle('dna-folded', !!S.folds[k]);
+        saveSettings(true);
     });
 }
 
@@ -3552,8 +3519,11 @@ const PANEL_HTML = `
       </div>
     </div>
 
-    <div class="st-chatu8-settings-section">
-      <h3 class="dna-collapse-head"><i class="fa-solid fa-microchip"></i> LLM 配置</h3>
+    <div class="st-chatu8-settings-section dna-fold" data-fold="libLLM">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-microchip"></i> LLM 配置</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="libLLM" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
       <div class="dna-hint">档案库（自动记录 + 这里的测试工具）用这份。地址 / Key / 模型全部从智绘姬「LLM」页签读取，DNA 只记「用哪一份」，换这里<b>不会</b>改动智绘姬当前的选择。</div>
       <div class="st-chatu8-field">
         <label>使用哪份配置</label>
@@ -3566,8 +3536,11 @@ const PANEL_HTML = `
       <div class="dna-hint" data-dna="modelHint"></div>
     </div>
 
-    <div class="st-chatu8-settings-section">
-      <h3 class="dna-collapse-head"><i class="fa-solid fa-layer-group"></i> 上下文预设</h3>
+    <div class="st-chatu8-settings-section dna-fold" data-fold="libPreset">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-layer-group"></i> 上下文预设</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="libPreset" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
       <div class="dna-hint">
         档案库自己的预设，和「手动生成」那份<b>完全分开</b>。导入一份智绘姬格式的上下文预设，自动记录时就按它的条目组装 messages。
         条目可以逐条开关，勾掉的不会发出去。预设里能写 <code>{{正文}}</code>、<code>{{角色卡设定}}</code>、<code>{{旧档案}}</code>、
@@ -3720,8 +3693,11 @@ const PANEL_HTML = `
       </div>
     </div>
 
-    <div class="st-chatu8-settings-section">
-      <h3 class="dna-collapse-head"><i class="fa-solid fa-microchip"></i> LLM 配置</h3>
+    <div class="st-chatu8-settings-section dna-fold" data-fold="genLLM">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-microchip"></i> LLM 配置</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="genLLM" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
       <div class="dna-hint">手动生成（含下面那个测试工具）用这份，和档案库那份<b>各选各的</b>。没单独选过就沿用档案库那份。</div>
       <div class="st-chatu8-field">
         <label>使用哪份配置</label>
@@ -3734,8 +3710,11 @@ const PANEL_HTML = `
       <div class="dna-hint" data-dna="genModelHint"></div>
     </div>
 
-    <div class="st-chatu8-settings-section">
-      <h3 class="dna-collapse-head"><i class="fa-solid fa-layer-group"></i> 上下文预设</h3>
+    <div class="st-chatu8-settings-section dna-fold" data-fold="genPreset">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-layer-group"></i> 上下文预设</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="genPreset" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
       <div class="dna-hint">
         手动生成自己的预设，和「档案库」那份<b>完全分开</b>，导入/开关都互不影响。
         条目可以逐条开关，勾掉的不会发出去。
@@ -4969,6 +4948,7 @@ function bindPanel() {
     const tab = document.querySelector('#dna-tab');
     if (!tab || tab.dataset.bound === '1') return;
     tab.dataset.bound = '1';
+    bindFoldClicks(tab);
 
     /* 子板块切换：档案库 / 手动生成 / 发送 & 工具 / 设置
        只切显示，不重建 DOM——所有 data-dna 控件都还在，事件绑定不受影响。 */
@@ -4981,7 +4961,7 @@ function bindPanel() {
         tab.dataset.sub = name;
         /* 切过去的时候再确认一遍折叠结构。幂等的：已经改造过的直接跳过，
            所以就算哪个 section 被外部重建了，切一次页签也能自愈。 */
-        initCollapsibles(tab);
+        applyFolds();
     };
     subTabs.forEach((b) => {
         b.addEventListener('click', (e) => {
@@ -4991,10 +4971,11 @@ function bindPanel() {
         });
     });
     showSub(tab.dataset.sub || 'lib');
-    initCollapsibles(tab);
+    applyFolds();
     bindPresetBoxes(tab);
 
     const fill = () => {
+        applyFolds();
         tab.querySelector('[data-dna="enabled"]').checked = !!S.enabled;
         tab.querySelector('[data-dna="autoScan"]').checked = !!S.autoScan;
         tab.querySelector('[data-dna="followChar"]').checked = !!S.followChar;
@@ -5735,7 +5716,7 @@ function boot() {
     installSendHooks();
     setTimeout(installSendHooks, 5000);
     setTimeout(installSendHooks, 20000);
-    log('角色DNA记录器已加载 v2.9.5 · 融合版（内置存储 + 上下文预设）');
+    log('角色DNA记录器已加载 v2.9.9 · 融合版（内置存储 + 上下文预设）');
 }
 
 /* 智绘姬重载页签内容时会把我们的页签冲掉，这里兜底重新挂载 */
