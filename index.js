@@ -4,7 +4,7 @@
  *
  * 这个文件只做一件事：按顺序加载两份代码。
  *   1) ./chatu8.js   智绘姬本体（文生图 / LLM / 酒馆陪伴，v3.1.7）
- *   2) ./dna.js      角色DNA记录器（v2.9.9 · 上下文预设导入 + 条目逐条开关）
+ *   2) ./dna.js      角色DNA记录器（v2.9.18 · 内置预设自动更新 + 组合生成 + AI回复折叠 + 档案模板编辑器 + 字段锁 + 别称机制）
  *
  * 两份代码仍然是独立模块，作用域互不污染。
  * dna.js 会自动在智绘姬设置面板左侧挂出「角色DNA」页签，
@@ -12,7 +12,7 @@
  *
  * 融合来源：
  *   st-chatu8        3.1.7  (C) 从前跟你一样   AFPL v9
- *   角色DNA记录器    2.9.9  moran99123
+ *   角色DNA记录器    2.9.18  moran99123
  *
  * 模块求值顺序由 import 声明保证：chatu8.js 先完整执行，
  * 再执行 dna.js，因此 DNA 挂载时智绘姬一定已经存在。
@@ -25,6 +25,6 @@ import './dna.js';
 globalThis.__chatu8Fusion = Object.freeze({
     name: 'st-chatu8-fusion',
     base: 'st-chatu8 3.1.7',
-    dna: 'st-chatu8-dna 2.9.9',
+    dna: 'st-chatu8-dna 2.9.18',
     entry: 'index.js',
 });

@@ -4,6 +4,28 @@
  * 本文件是原扩展的构建产物（原 st-chatu8-dna/index.js）。
  * 字段规则已经内联在下方，不需要再跑构建脚本。
  *
+ * v2.9.18：内置预设加版本号——presets/ 里的内置预设改版后，下次进酒馆自动重装（以前只在首次安装时装一次，
+ *          改了文件用户库里那份永远不变，等于白改）；预设管理框新增「更新内置」按钮可手动强刷
+ * v2.9.17：新增「别称」字段（小名 / 外号 / 昵称，多个用「、」隔开）——
+ *          写档案时只增不减地并进老档案；正文用别称称呼也算这个角色出场（发送数据、形态切换都认）；
+ *          档案列表在名字后面显示别称；三份内置上下文预设与内置字段规范同步加上别称规则
+ * v2.9.16：档案详情里每个字段条目都带小锁头——锁住的字段 AI 不改写、手动也点不开编辑；
+ *          锁按字段名存，所以模板里多加出来的字段（九段变十段十二段…）同样能单独锁
+ * v2.9.15：档案模板瘦身——模板只管「有哪些字段」，字段规范 / 输出格式那些提示词交回上下文预设；
+ *          模板新增「新建模板 / 编辑模板」悬浮窗编辑器（方便二创），面板与弹窗都提醒「改模板必须同步改预设」；
+ *          「发送数据」里没用的「发给哪几种请求」勾选和预览 / 状态栏位删掉，只留「发送 DNA」一个总开关
+ * v2.9.14：手动生成的收录规则改为「用户要求优先 + 判断轻重（轻的也照样建档，只影响详略）」；
+ *         ① 按世界书条目生成里的条目列表可以折叠；智绘姬 LLM 页签的模型参数 / 上下文配置 / 上下文历史可折叠并记住状态
+ * v2.9.13：服装线并入「组合生成」——①②③ 任意组合，服装不许单独生成。
+ * v2.9.12：档案库新增「档案模板」——模板可导出 / 导入 / 切换 / 删除，默认模板内置不可删；
+ *         模板决定 AI 输出哪些字段、字段规则、JSON 格式，自动记录与手动生成都跟它走；
+ *         老档案换模板后详情里照旧显示多出来的字段。
+ * v2.9.11：「发送数据」只留把 DNA 发给 LLM（去掉发送范围）；手动生成三条线整合——世界书 / 角色 / 服装
+ *          可以单独生成，也可以「三条一起生成」；AI 回复（实时）加折叠按钮，默认收起，状态记在设置里
+ *          （退出再进来还是上次那样）；手机版勾选列表字号缩小、条目名可换行
+ * v2.9.10：设置最底部加「保存」；世界书条目加小眼睛（悬浮窗看原文 / 改 / 存回酒馆或智绘姬世界书）；
+ *          导入文本支持按 token 分段（「分段生成tokens上限」），一段一次请求；
+ *          子页签重排：档案库单独一栏，其余配置归入「自动生成」（扫描层数 / 记录间隔也搬进去了）
  * v2.9.9：折叠功能推倒重做（原来借用了智绘姬本体的折叠类，被本体在 document 上的委托点击又 toggle 一次，
  *         一次点击 toggle 两下 = 点了没反应；现在换成 DNA 自己的类名 + 自己的点击委托 + 自己记状态）
  * v2.9.6：LLM 配置与上下文预设拆成「档案库 / 手动生成」两套（各选各的，互不影响）；
@@ -46,9 +68,10 @@ const DEFAULTS = {
     breakTail: true,           // 用智绘姬「末尾多 Role 消息」
     /* 发送数据：智绘姬跑 LLM（出 Tag / Tag 修改…）时，把对应角色的 DNA 一起发过去 */
     sendEnabled: true,
-    sendTargets: ['image_gen', 'tag_modify'],
-    sendMode: 'mentioned',
-    replyMaxTokens: 10000,     // AI 回复的输出上限（token）；0 = 不设上限     // mentioned = 只发正文里提到的角色；all = 发本库全部
+    /* 字段锁：{ 字段名: true }。锁住的字段 AI 不改写、手动也不能编辑。
+       按字段名存（不按人物），所以模板里加了新字段也能单独锁。 */
+    fieldLocks: {},
+    replyMaxTokens: 10000,     // AI 回复的输出上限（token）；0 = 不设上限
     retryCount: 0,             // 请求失败时自动重试几次；0 = 不重试
     /* 上下文预设：导入一份智绘姬格式的上下文预设，DNA 记录时按它的条目组装 messages。
        不导入或关掉时，还是用下面 batchPrompt 那套内置提示词。 */
@@ -63,7 +86,9 @@ const DEFAULTS = {
     genPresetSeeded: false,    // 是否已做过「把档案库预设复制一份给手动生成」的一次性迁移
     seedPreset: '',            // 内置默认预设（档案库那份）装过没有（存文件名，装过就不再自动装）
     seedGenPreset: '',         // 内置默认预设（手动生成那份）装过没有
-    /* 折叠状态：{ libLLM, libPreset, genLLM, genPreset } → true = 收起。
+    seedPresetVer: '',         // 已装的那份内置预设是哪个版本（内置预设改版后自动重装一次）
+    seedGenPresetVer: '',
+    /* 折叠状态：{ libAI, libLLM, libPreset, genAI, genLLM, genPreset } → true = 收起。
        DNA 自己记，不借智绘姬那套折叠状态（两边混用会互相打架）。 */
     folds: {},
     /* LLM 配置：DNA 自己记一份选中的配置名。只读智绘姬那份配置列表，
@@ -76,11 +101,20 @@ const DEFAULTS = {
     genBookFollowCard: true,   // 进入角色卡时把世界书自动切到这张卡的主世界书（手动选书会关掉它）
     genEntries: [],            // 勾选的条目：st 存 '书::uid'，chatu8 存条目名
     genChars: [],              // 勾选的智绘姬「角色管理」角色预设名
+    genOutfits: [],            // 勾选的智绘姬「服装」服装预设名
+    dnaTemplate: '',           // 当前用的档案模板名（'' = 内置默认模板）
+    dnaTemplates: {},          // 导入的档案模板：{ 模板名: { fields, rules, format, importedAt } }
     genExtraChars: [],         // 手动补进去的角色名
     genInstruction: '',        // 额外要求（可留空）
     genTxtName: '',            // 导入的 txt 文件名（正文只在内存里，不落盘）
+    genTxtChunk: 3000,         // 分段生成tokens上限：一条请求最多吃多少 token；0 = 不分段
+    genTxtPart: 0,             // 0 = 全部段依次生成；1..N = 只生成第 N 段
     records: {}                // 内置存储：{ 卡片key: { card, entries: { 角色名: 档案 } } }
 };
+
+/* 这几块默认收起（第一次进来看到的是收起状态）；没列在这里的块默认展开。
+   状态本身存在 S.folds 里，退出再进来照旧——「上次是展开，下次还是展开」。 */
+const FOLD_DEFAULT_FOLDED = { libAI: true, genAI: true };
 
 /* 旧版本里插件自己存过一份 API 配置，现在统一用智绘姬那份，这些键直接丢掉 */
 const LEGACY_KEYS = ['worldbookName', 'useChatu8LLM', 'apiFormat', 'apiUrl', 'apiKey', 'model', 'modelCache', 'temperature', 'maxTokens'];
@@ -141,14 +175,16 @@ function loadSettings() {
     /* 老版本遗留字段，直接丢掉 */
     for (const k of LEGACY_KEYS) delete out[k];
     if (!out.records || typeof out.records !== 'object' || Array.isArray(out.records)) out.records = {};
-    if (!Array.isArray(out.sendTargets)) out.sendTargets = DEFAULTS.sendTargets.slice();
+    delete out.sendTargets;      // 发送范围设置已删掉（现在所有请求类型都发）
+    if (!out.fieldLocks || typeof out.fieldLocks !== 'object' || Array.isArray(out.fieldLocks)) out.fieldLocks = {};
     /* 发送数据的上限单位从「字」改成「token」，老字段丢掉直接用新默认 */
     delete out.sendMaxChars;
     delete out.sendMaxTokens;   // 请求长度不再设上限，老字段清掉
     out.retryCount = clampInt(out.retryCount, 0, 5, 0);
     /* AI 回复上限：0 = 不设上限；老版本没这字段时给默认 10000 */
     out.replyMaxTokens = clampInt(out.replyMaxTokens, 0, 200000, 10000);
-    if (!out.sendMode) out.sendMode = DEFAULTS.sendMode;
+    /* 发送范围设置已删掉：只保留「把正文里出场角色的 DNA 发给 LLM」这一种行为 */
+    delete out.sendMode;
     if (!out.presets || typeof out.presets !== 'object' || Array.isArray(out.presets)) out.presets = {};
     if (!out.presetsGen || typeof out.presetsGen !== 'object' || Array.isArray(out.presetsGen)) out.presetsGen = {};
     if (typeof out.genPresetName !== 'string') out.genPresetName = '';
@@ -158,7 +194,18 @@ function loadSettings() {
     if (typeof out.presetName !== 'string') out.presetName = '';
     if (typeof out.seedPreset !== 'string') out.seedPreset = '';
     if (typeof out.seedGenPreset !== 'string') out.seedGenPreset = '';
+    if (typeof out.seedPresetVer !== 'string') out.seedPresetVer = '';
+    if (typeof out.seedGenPresetVer !== 'string') out.seedGenPresetVer = '';
     if (!out.folds || typeof out.folds !== 'object' || Array.isArray(out.folds)) out.folds = {};
+    /* 默认收起的块显式写进设置：用户点开过（true→false）就一直记着是展开 */
+    for (const fk of Object.keys(FOLD_DEFAULT_FOLDED)) {
+        if (!(fk in out.folds)) out.folds[fk] = !!FOLD_DEFAULT_FOLDED[fk];
+    }
+    if (!Array.isArray(out.genOutfits)) out.genOutfits = [];
+    if (typeof out.dnaTemplate !== 'string') out.dnaTemplate = '';
+    if (!out.dnaTemplates || typeof out.dnaTemplates !== 'object' || Array.isArray(out.dnaTemplates)) out.dnaTemplates = {};
+    /* 选中的模板被删掉 / 存坏了 → 退回内置默认模板 */
+    if (out.dnaTemplate && !out.dnaTemplates[out.dnaTemplate]) out.dnaTemplate = '';
     if (!['auto', 'desktop', 'mobile'].includes(out.uiMode)) out.uiMode = 'auto';
     /* v2.9.3 新增：LLM 配置独立 + 手动生成的选择 */
     if (typeof out.llmProfile !== 'string') out.llmProfile = '';
@@ -168,6 +215,8 @@ function loadSettings() {
     if (typeof out.genBookFollowCard !== 'boolean') out.genBookFollowCard = true;
     if (typeof out.genInstruction !== 'string') out.genInstruction = '';
     if (typeof out.genTxtName !== 'string') out.genTxtName = '';
+    out.genTxtChunk = clampInt(out.genTxtChunk, 0, 200000, 3000);
+    out.genTxtPart = clampInt(out.genTxtPart, 0, 9999, 0);
     for (const k of ['genEntries', 'genChars', 'genExtraChars']) {
         if (!Array.isArray(out[k])) out[k] = [];
         else out[k] = out[k].filter((x) => typeof x === 'string' && x.trim());
@@ -476,11 +525,15 @@ function saveRecord(profile, floor) {
     /* 锁定的档案：AI 一律不许改（自动记录 / 手动生成都会走到这里被挡住） */
     if (old && old._locked) return 'locked';
     if (old && !S.updateExisting) return 'skipped';
-    /* 按 DNA_FIELDS 的顺序落盘，字段集与「重要角色表」的列一致 */
+    /* 按当前模板的字段顺序落盘（默认模板＝姓 Name + 9 字段那套） */
     const rec = { '姓名': name };
-    for (const k of DNA_FIELDS) {
+    for (const k of tplFields()) {
         if (k === '姓名') continue;
         rec[k] = profile[k] || '';
+        /* 别称只增不减：老档案里记下的小名，AI 这轮没提到也不能丢 */
+        if (old && k === ALIAS_FIELD) rec[k] = aliasMerge(old[k], rec[k]);
+        /* 这个字段被锁住 → 老档案里有值就照抄老值，AI 写什么都不认 */
+        if (old && fieldLocked(k) && String(old[k] || '').trim()) rec[k] = old[k];
     }
     rec._updated = Date.now();
     rec._floor = floor || '';
@@ -541,6 +594,33 @@ function lockedCount() {
     let n = 0;
     for (const k in entries) if (entries[k] && entries[k]._locked) n++;
     return n;
+}
+
+/* ------------------------------ 字段锁 ------------------------------ */
+/* 锁住某个字段 = 这个字段 AI 不改写（saveProfile 会保留原值），你也点不开编辑框。
+   按字段名保存，不跟人物走：模板里多加一个字段，它照样有自己的小锁。 */
+function fieldLocked(k) {
+    return !!(S.fieldLocks && S.fieldLocks[k]);
+}
+
+function setFieldLock(k, on) {
+    if (!S.fieldLocks || typeof S.fieldLocks !== 'object' || Array.isArray(S.fieldLocks)) S.fieldLocks = {};
+    if (on) S.fieldLocks[k] = true; else delete S.fieldLocks[k];
+    saveSettings(true);
+}
+
+function lockedFieldNames() {
+    return Object.keys(S.fieldLocks || {}).filter((k) => S.fieldLocks[k]);
+}
+
+function toggleFieldLock(k) {
+    if (!k) return false;
+    const next = !fieldLocked(k);
+    setFieldLock(k, next);
+    log(next ? ('已锁住字段「' + k + '」：AI 不会改写它，手动也不能编辑') : ('已解锁字段「' + k + '」'));
+    toast(next ? ('已锁住字段「' + k + '」') : ('已解锁字段「' + k + '」'));
+    renderList();
+    return true;
 }
 
 function deleteRecord(name) {
@@ -869,16 +949,22 @@ function restoreChatu8RegexUI(scene) {
    两样都从那边原样读，这里不再自己写一份。 */
 /* 档案字段：与「重要角色表」的列一一对应（row_id 是表格行号，不进档案内容）。
    这个数组同时决定写入顺序、复制顺序和详情里的展示顺序。 */
-const DNA_FIELDS = ['姓名', '性别/年龄', '外貌特征', '当前衣着/装扮', '核心DNA', '服装DNA', '本名', '外貌串', '服装串'];
+const DNA_FIELDS = ['姓名', '别称', '性别/年龄', '外貌特征', '当前衣着/装扮', '核心DNA', '服装DNA', '本名', '外貌串', '服装串'];
 
 const FIELD_RULES = [
-    "只输出这 9 个字段：姓名 / 性别/年龄 / 外貌特征 / 当前衣着/装扮 / 核心DNA / 服装DNA / 本名 / 外貌串 / 服装串，",
+    "只输出这 10 个字段：姓名 / 别称 / 性别/年龄 / 外貌特征 / 当前衣着/装扮 / 核心DNA / 服装DNA / 本名 / 外貌串 / 服装串，",
     "一个都不许少，也不许自己增加别的字段（不要性格、身份、关系、能力、好感度这类）。",
+    "唯一允许留空的是「别称」：正文没提到小名外号就写空字符串，但这个键必须存在。",
     "",
     "【姓名】正文里的具体名字，原样照抄，不要改写成代称。",
     "多形态：同一角色的不同形态各占一条档案，姓名写成「原名·形态名」，并在末尾标注 [当前] / [非当前] / [永久封印]。",
     "只有正文明确发生形态转换、性别或种族变化、变身/觉醒、或达到条件的 Cosplay 才另立形态；",
     "普通理发、持久染发、临时假发、一次性美瞳都算原形态的更新，不另立形态。",
+    "",
+    "【别称】小名、外号、绰号、昵称、别人平时怎么称呼她 —— 有一个写一个，多个用「、」隔开（例：「明明、明哥」）。",
+    "只写正文里真的这么称呼过的；没提到就写空字符串。别称不是姓名，也不代替姓名。",
+    "这是追加栏：资料里给了上次档案、上次的别称已经写了，就原样带上，把新发现的补在后面，不许丢老的、不许改写老的。",
+    "正文里用别称称呼人，也算这个角色出场。",
     "",
     "【性别/年龄】性别与年龄写成一段，例如「女/23」「男/40 上下」。",
     "正文没写年龄时，按人物的种族、身份与整体设计推定一个具体数字，不要写「未知」。",
@@ -960,12 +1046,9 @@ function batchPrompt(text, pack) {
     lines.push('· 只是被顺口提一句、并没有真正出场的人物不要收录。');
     lines.push('');
     lines.push('【输出格式】只输出 JSON 数组本身，不要 markdown 代码块，不要任何解释：');
-    lines.push('[');
-    lines.push('  {"姓名":"甲","性别/年龄":"…","外貌特征":"…","当前衣着/装扮":"…","核心DNA":"…","服装DNA":"…","本名":"甲","外貌串":"这是生图的外貌提示词：girl, …","服装串":"这是生图的服装提示词：…"},');
-    lines.push('  {"姓名":"乙","性别/年龄":"…","外貌特征":"…","当前衣着/装扮":"…","核心DNA":"…","服装DNA":"…","本名":"乙","外貌串":"这是生图的外貌提示词：boy, …","服装串":"这是生图的服装提示词：…"}');
-    lines.push(']');
+    lines.push(tplFormat());
     lines.push('');
-    lines.push(...FIELD_RULES);
+    lines.push(...tplRuleLines());
     if (origins.length) {
         lines.push('');
         lines.push('【角色卡里的角色设定】');
@@ -996,7 +1079,7 @@ function batchPrompt(text, pack) {
 
 function buildContent(profile) {
     const lines = [];
-    for (const k of DNA_FIELDS) {
+    for (const k of tplFields()) {
         const v = String(profile[k] == null ? '' : profile[k]).trim();
         if (!v) continue;   /* 旧档案缺的新字段不占行 */
         lines.push(k + '：' + v);
@@ -1018,7 +1101,7 @@ const PRESET_TOKENS = [
     { keys: ['{{角色卡设定}}', '{{DNA_ORIGINS}}'], label: '角色卡设定' },
     { keys: ['{{旧档案}}', '{{DNA_OLDS}}'], label: '上次记录的档案' },
     { keys: ['{{收录规则}}', '{{DNA_RULES}}'], label: '收录规则' },
-    { keys: ['{{字段规范}}', '{{DNA_FIELDS}}'], label: '九字段规范' },
+    { keys: ['{{字段规范}}', '{{DNA_FIELDS}}'], label: '字段规范（跟当前档案模板走）' },
     { keys: ['{{输出格式}}', '{{DNA_FORMAT}}'], label: '输出格式' }
 ];
 
@@ -1027,15 +1110,95 @@ const COLLECT_RULES = [
     '· 正文里出现具体名字的人物，全部收录，一个都不许漏。',
     '· 只有专指称谓、但明确指向某个具体人物的，也收录，姓名写那个称谓。',
     '· 泛称、群体（士兵、守卫、侍女、人群、路人甲、众人、老板、酒保、摊贩）一律不收录。',
-    '· 只被顺口提一句、并没有真正出场的人物不收录。'
+    '· 只被顺口提一句、并没有真正出场的人物不收录。',
+    '· 正文里用别称（小名、外号）称呼人，也算这个角色出场。',
+    '· 发现别称就写进「别称」栏，多个用「、」隔开；上次档案里已有的别称要原样带上，只许追加不许删改。'
 ].join('\n');
 
 const JSON_TEMPLATE = [
     '[',
-    '  {"姓名":"甲","性别/年龄":"…","外貌特征":"…","当前衣着/装扮":"…","核心DNA":"…","服装DNA":"…","本名":"甲","外貌串":"这是生图的外貌提示词：girl, …","服装串":"这是生图的服装提示词：…"},',
-    '  {"姓名":"乙","性别/年龄":"…","外貌特征":"…","当前衣着/装扮":"…","核心DNA":"…","服装DNA":"…","本名":"乙","外貌串":"这是生图的外貌提示词：boy, …","服装串":"这是生图的服装提示词：…"}',
+    '  {"姓名":"甲","别称":"明明、明哥","性别/年龄":"…","外貌特征":"…","当前衣着/装扮":"…","核心DNA":"…","服装DNA":"…","本名":"甲","外貌串":"这是生图的外貌提示词：girl, …","服装串":"这是生图的服装提示词：…"},',
+    '  {"姓名":"乙","别称":"…","性别/年龄":"…","外貌特征":"…","当前衣着/装扮":"…","核心DNA":"…","服装DNA":"…","本名":"乙","外貌串":"这是生图的外貌提示词：boy, …","服装串":"这是生图的服装提示词：…"}',
     ']'
 ].join('\n');
+
+/* ------------------------------ 档案模板 ------------------------------ */
+/* v2.9.15 起：模板只管「这份档案有哪些字段」——决定落盘顺序、详情展示顺序、buildContent 输出什么。
+   「每个字段怎么写 / JSON 长什么样」这类提示词不再存在模板里，统一由上下文预设提供；
+   所以改了模板字段之后，必须同步改对应的上下文预设，否则模型输出对不上字段。
+   内置默认模板就是那套十字段（姓名 + 别称 + 8 个，改不了、删不掉）；导入/自建的模板存在 S.dnaTemplates 里按名切换。
+   导出的 JSON 就是「可以改完再导回来」的样子：{ name, fields:[…] }。 */
+function normalizeTemplate(raw, fallbackName) {
+    const src = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : {};
+    const name = String(src.name || src['模板名'] || fallbackName || '').trim() || '未命名模板';
+    let fields = src.fields || src['字段'] || src.columns;
+    if (typeof fields === 'string') fields = fields.split(/[,\n、|]+/);
+    fields = (Array.isArray(fields) ? fields : [])
+        .map((f) => String(f && f.name !== undefined ? f.name : f).trim())
+        .filter(Boolean);
+    if (!fields.length) throw new Error('模板里没有字段列表（fields）');
+    /* 姓名必须是第一个：档案以姓名为键 */
+    fields = ['姓名'].concat(fields.filter((f) => f !== '姓名'));
+    /* 旧模板文件里的 rules / format 直接忽略：模板不再保存提示词（v2.9.15） */
+    return {
+        name,
+        fields,
+        importedAt: src.importedAt || new Date().toISOString()
+    };
+}
+
+/* 当前生效的模板：没选、或者选的那份没了 → 内置默认 */
+function activeTemplate() {
+    const bag = S.dnaTemplates || {};
+    const t = S.dnaTemplate && bag[S.dnaTemplate];
+    return t ? t : { name: '默认模板', fields: DNA_FIELDS };
+}
+
+function tplIsDefault() {
+    return !(S.dnaTemplate && (S.dnaTemplates || {})[S.dnaTemplate]);
+}
+
+function tplFields() {
+    const f = activeTemplate().fields;
+    const arr = Array.isArray(f) ? f.filter(Boolean) : [];
+    return arr.length ? arr : DNA_FIELDS;
+}
+
+/* 字段规范 / 输出格式：模板不提供，固定用内置这套。
+   预设里写 {{字段规范}} / {{输出格式}} 占位符时填的就是这里；想让 AI 换写法就改预设条目。 */
+function tplRules() {
+    return FIELD_RULES.join('\n');
+}
+
+function tplRuleLines() {
+    return FIELD_RULES.slice();
+}
+
+function tplFormat() {
+    return JSON_TEMPLATE;
+}
+
+/* 详情用：模板字段在前，档案里多出来的旧字段跟在后（换模板后旧档案也不会「丢」内容） */
+function tplDetailFields(rec) {
+    const out = tplFields().filter((k) => k !== '姓名');
+    const push = (k) => { if (k && k !== '姓名' && k.charAt(0) !== '_' && out.indexOf(k) < 0) out.push(k); };
+    DNA_FIELDS.forEach(push);
+    Object.keys(rec || {}).forEach(push);
+    return out;
+}
+
+/* 导出用的对象（name 留空 = 当前模板） */
+function templateExport(name) {
+    const t = name ? ((S.dnaTemplates || {})[name] || null) : activeTemplate();
+    if (!t) return null;
+    return {
+        type: 'st-chatu8-dna-template',
+        version: 2,
+        name: name || t.name || (tplIsDefault() ? '默认模板' : S.dnaTemplate),
+        fields: Array.isArray(t.fields) ? t.fields : DNA_FIELDS,
+        exportedAt: new Date().toISOString()
+    };
+}
 
 /* 和智绘姬一样：//* 注释行不进 messages */
 function stripPresetComments(text) {
@@ -1127,8 +1290,8 @@ function presetBlocks(text, pack) {
         '{{世界书设定}}': '',
         '{{旧档案}}': oldText,
         '{{收录规则}}': COLLECT_RULES,
-        '{{字段规范}}': FIELD_RULES.join('\n'),
-        '{{输出格式}}': JSON_TEMPLATE
+        '{{字段规范}}': tplRules(),
+        '{{输出格式}}': tplFormat()
     };
 }
 
@@ -1437,9 +1600,15 @@ const LEGACY_PRESET_NAMES = ['昆仑DNA档案记录版 · 九字段'];
 const DEFAULT_GEN_PRESET_FILE = 'presets/st_chatu8_gen_worldbook_chars_v3.json';   // 纯 ASCII 文件名，避免解压后中文名取不到
 const DEFAULT_GEN_PRESET_NAME = '昆仑DNA建档版 · 世界书角色';
 
+/* 内置预设的版本号：动了 presets/ 里那两个文件的内容，就把这里一起改掉。
+   老用户下次进来自动重装内置预设（自己导入 / 新建的预设一律不动）。
+   以前只看「装过没有」，所以插件升级后规则改了，用户库里那份永远不会变——这就是「改了没生效」。 */
+const BUILTIN_PRESET_VER = 'v2.9.18';
+
 /* 装一次内置默认预设。装过就记住（seedPreset），以后就算删掉也不会每次刷新又冒出来 */
-async function ensureDefaultPreset() {
-    if (S.seedPreset === DEFAULT_PRESET_FILE) return false;
+async function ensureDefaultPreset(force) {
+    /* 装过同一个版本就不再动；内置预设改版（BUILTIN_PRESET_VER 变了）自动重装一次 */
+    if (!force && S.seedPreset === DEFAULT_PRESET_FILE && S.seedPresetVer === BUILTIN_PRESET_VER) return false;
     try {
         const url = new URL(DEFAULT_PRESET_FILE, import.meta.url).toString();
         const res = await fetch(url, { cache: 'no-cache' });
@@ -1449,7 +1618,7 @@ async function ensureDefaultPreset() {
         const names = Object.keys(found);
         if (!names.length) { log('内置默认预设里没找到条目', 'error'); return false; }
         const now = Date.now();
-        for (const n of names) S.presets[n] = { entries: found[n], importedAt: now, source: '内置默认预设' };
+        for (const n of names) S.presets[n] = { entries: found[n], importedAt: now, source: '内置默认预设', builtinVer: BUILTIN_PRESET_VER };
         /* 上一版内置预设自动退场（只删我们自己装的，用户自己导入的不动） */
         for (const legacy of LEGACY_PRESET_NAMES) {
             if (names.indexOf(legacy) >= 0) continue;
@@ -1459,9 +1628,10 @@ async function ensureDefaultPreset() {
             }
         }
         /* 装内置默认预设这一次，顺手把它切成当前用的那份（只此一次，之后你手动选什么就是什么） */
-        S.presetName = names[0];
+        S.presetName = (S.presetName && S.presets[S.presetName]) ? S.presetName : names[0];
         S.presetEnabled = true;
         S.seedPreset = DEFAULT_PRESET_FILE;
+        S.seedPresetVer = BUILTIN_PRESET_VER;
         patchPresetStart();
         saveSettings(true);
         try { mirrorToChatu8(names); } catch (e) { /* 智绘姬没就绪不影响 */ }
@@ -1497,8 +1667,8 @@ function migrateGenPresets() {
 }
 
 /* 装一次手动生成的内置预设（读世界书 / 角色管理那套）。装过就记住，删掉也不会自己冒回来 */
-async function ensureDefaultGenPreset() {
-    if (S.seedGenPreset === DEFAULT_GEN_PRESET_FILE) return false;
+async function ensureDefaultGenPreset(force) {
+    if (!force && S.seedGenPreset === DEFAULT_GEN_PRESET_FILE && S.seedGenPresetVer === BUILTIN_PRESET_VER) return false;
     try {
         const url = new URL(DEFAULT_GEN_PRESET_FILE, import.meta.url).toString();
         const res = await fetch(url, { cache: 'no-cache' });
@@ -1508,11 +1678,12 @@ async function ensureDefaultGenPreset() {
         const names = Object.keys(found);
         if (!names.length) { log('内置手动生成预设里没找到条目', 'error'); return false; }
         const now = Date.now();
-        for (const n of names) S.presetsGen[n] = { entries: found[n], importedAt: now, source: '内置默认预设' };
+        for (const n of names) S.presetsGen[n] = { entries: found[n], importedAt: now, source: '内置默认预设', builtinVer: BUILTIN_PRESET_VER };
         /* 装这一次顺手切成当前用的那份，之后你手动选什么就是什么 */
-        S.genPresetName = names[0];
+        S.genPresetName = (S.genPresetName && S.presetsGen[S.genPresetName]) ? S.genPresetName : names[0];
         S.genPresetEnabled = true;
         S.seedGenPreset = DEFAULT_GEN_PRESET_FILE;
+        S.seedGenPresetVer = BUILTIN_PRESET_VER;
         saveSettings(true);
         log('已装好手动生成预设「' + names[0] + '」（' + found[names[0]].length + ' 条）');
         return true;
@@ -1520,6 +1691,24 @@ async function ensureDefaultGenPreset() {
         log('装手动生成预设失败：' + (e && e.message ? e.message : e), 'error');
         return false;
     }
+}
+
+/* 用户点「更新内置」时走这里：把那份内置预设强制刷成插件里的最新版本。
+   只管内置那一份，自己导入 / 新建的预设一概不动。 */
+async function onPresetReseed(scope) {
+    const isGen = scope === 'gen';
+    const name = isGen ? DEFAULT_GEN_PRESET_NAME : DEFAULT_PRESET_NAME;
+    const label = isGen ? '手动生成' : '档案库';
+    const has = isGen ? !!S.presetsGen[name] : !!S.presets[name];
+    const ok = confirm('把' + label + '的内置预设「' + name + '」刷新成插件里的最新版本？' +
+        (has ? '\n\n你对这一份做过的改动会被覆盖（自己导入 / 新建的预设不受影响）。' : ''));
+    if (!ok) return false;
+    if (isGen) { S.seedGenPreset = ''; S.seedGenPresetVer = ''; await ensureDefaultGenPreset(true); }
+    else { S.seedPreset = ''; S.seedPresetVer = ''; await ensureDefaultPreset(true); }
+    saveSettings(true);
+    renderPresetCard(scope);
+    toast(label + '的内置预设已更新到最新版');
+    return true;
 }
 
 function presetPlaceholderState(list) {
@@ -1604,12 +1793,19 @@ function renderPresetCard(scope) {
 
    收起的表现：.dna-folded 让 head 之外的所有子元素 display:none（见 dna.css），
    不用再包一层 body，静态 HTML 也不用跟着改结构。 */
+/* 某块当前是不是收起的：设置里记过就用记的，没记过就看默认值 */
+function foldOn(key, bag) {
+    const f = bag || ((S.folds && typeof S.folds === 'object') ? S.folds : {});
+    if (key in f) return !!f[key];
+    return !!FOLD_DEFAULT_FOLDED[key];
+}
+
 function applyFolds() {
     const tab = document.querySelector('#dna-tab');
     if (!tab) return;
     const f = (S.folds && typeof S.folds === 'object') ? S.folds : {};
     tab.querySelectorAll('[data-fold]').forEach((sec) => {
-        sec.classList.toggle('dna-folded', !!f[sec.dataset.fold]);
+        sec.classList.toggle('dna-folded', foldOn(sec.dataset.fold, f));
     });
 }
 
@@ -1623,12 +1819,14 @@ function bindFoldClicks(tab) {
         const btn = t && t.closest ? t.closest('[data-fold-btn]') : null;
         const head = t && t.closest ? t.closest('.dna-fold-head') : null;
         if (!btn && !head) return;
+        /* 标题行里塞了搜索框 / 全选按钮的折叠块：点这些控件只当操作用，不折叠 */
+        if (!btn && t.closest('input, select, textarea, a, button')) return;
         const sec = (btn || head).closest('[data-fold]');
         if (!sec) return;
         e.preventDefault();
         const k = sec.dataset.fold;
         if (!S.folds || typeof S.folds !== 'object') S.folds = {};
-        S.folds[k] = !S.folds[k];
+        S.folds[k] = !foldOn(k, S.folds);
         sec.classList.toggle('dna-folded', !!S.folds[k]);
         saveSettings(true);
     });
@@ -1894,18 +2092,28 @@ function normalizeProfile(raw, name) {
         }
         return '';
     };
-    const out = {
-        '姓名': pick('姓名', 'name', '名字', '角色名', '角色') || name,
-        '性别/年龄': pick('性别/年龄', '性别年龄', '性别', '年龄', 'gender_age', 'gender', 'age'),
-        '外貌特征': pick('外貌特征', '外貌', '外观', '外貌描述', 'appearance', 'looks'),
-        '当前衣着/装扮': pick('当前衣着/装扮', '当前衣着', '当前装扮', '衣着', '装扮', '服装', 'current_outfit', 'outfit'),
-        '核心DNA': pick('核心DNA', '核心dna', 'core_dna', 'DNA', '核心基因'),
-        '服装DNA': pick('服装DNA', '服装dna', 'clothing_dna', '服饰DNA', '衣物DNA'),
-        '本名': pick('本名', '原名', '原始姓名', 'original_name', 'realname'),
-        '外貌串': pick('外貌串', '外貌提示词', '外貌prompt', 'appearance_prompt', 'appearanceprompt'),
-        '服装串': pick('服装串', '服装提示词', '服装prompt', 'outfit_prompt', 'outfitprompt')
+    /* 模板字段 → AI 可能用的别名（自定义字段没别名，就按字段名本身取） */
+    const ALIAS = {
+        '别称': ['别称', '别名', '小名', '外号', '绰号', '花名', '昵称', 'alias', 'aliases', 'nickname', 'nicknames'],
+        '性别/年龄': ['性别/年龄', '性别年龄', '性别', '年龄', 'gender_age', 'gender', 'age'],
+        '外貌特征': ['外貌特征', '外貌', '外观', '外貌描述', 'appearance', 'looks'],
+        '当前衣着/装扮': ['当前衣着/装扮', '当前衣着', '当前装扮', '衣着', '装扮', '服装', 'current_outfit', 'outfit'],
+        '核心DNA': ['核心DNA', '核心dna', 'core_dna', 'DNA', '核心基因'],
+        '服装DNA': ['服装DNA', '服装dna', 'clothing_dna', '服饰DNA', '衣物DNA'],
+        '本名': ['本名', '原名', '原始姓名', 'original_name', 'realname'],
+        '外貌串': ['外貌串', '外貌提示词', '外貌prompt', 'appearance_prompt', 'appearanceprompt'],
+        '服装串': ['服装串', '服装提示词', '服装prompt', 'outfit_prompt', 'outfitprompt']
     };
-    if (!out['核心DNA'] && !out['外貌特征'] && !out['当前衣着/装扮']) return null;
+    const out = { '姓名': pick('姓名', 'name', '名字', '角色名', '角色') || name };
+    let filled = 0;
+    for (const f of tplFields()) {
+        if (f === '姓名') continue;
+        const keys = ALIAS[f] ? [f].concat(ALIAS[f]) : [f];
+        const v = pick.apply(null, keys);
+        out[f] = v;
+        if (v) filled++;
+    }
+    if (!filled) return null;
     return out;
 }
 
@@ -2312,7 +2520,7 @@ async function callAI(prompt, scope, replyMax, onDelta) {
 /* 一次任务（扫描 / 手动生成 / 测试）共用一个 AbortController；
    按钮只在这期间可用，任务结束自动失效。 */
 let abortCtl = null;
-const ABORT_KEYS = ['abortScan', 'genAbortWorld', 'genAbortChars', 'genAbortText'];
+const ABORT_KEYS = ['abortScan', 'genAbortWorld', 'genAbortChars', 'genAbortMix', 'genAbortText'];
 
 function abortSignal() {
     if (typeof AbortController !== 'function') return undefined;
@@ -2688,11 +2896,6 @@ const SEND_LABELS = {
     visual_mat_prep: '视材准备'
 };
 
-function sendTargets() {
-    const arr = Array.isArray(S.sendTargets) ? S.sendTargets : [];
-    return arr.filter((k) => SEND_EVENTS[k]);
-}
-
 /* 一次请求里已经塞过就不再塞（重试 / 同一条 prompt 被重复 emit） */
 const sendStamp = new WeakSet();
 
@@ -2831,7 +3034,7 @@ function autoSwitchForms(text) {
     const out = [];
     for (const [base, list] of formGroups()) {
         if (list.length < 2) continue;
-        if (t.indexOf(base) < 0) continue;
+        if (t.indexOf(base) < 0 && !aliasHit(t, list, currentEntries())) continue;
         const hits = list
             .filter((x) => x.info.form && !x.info.isSealed && t.indexOf(x.info.form) >= 0)
             .sort((a, b) => t.lastIndexOf(b.info.form) - t.lastIndexOf(a.info.form));
@@ -2865,9 +3068,47 @@ function enforceOneCurrent(base, keepName) {
     }
 }
 
+/* ------------------------------ 别称 ------------------------------ */
+/* 别称一栏是小名 / 外号 / 昵称的集合，多个用「、」隔开。三处用途：
+   ① 写档案时只增不减地并进老档案（AI 这轮没提也不能丢）；
+   ② 正文里提到别称也算这个角色出场（发送数据、形态切换都用它判定）；
+   ③ 发送 DNA 时别称跟着档案一起发出去，让模型知道「明明」就是「王明」。 */
+const ALIAS_FIELD = '别称';
+const ALIAS_SEP = '、';
+
+function aliasSplit(v) {
+    return String(v == null ? '' : v)
+        .split(/[、,，;；\/|｜\n\r\t]+|\s{2,}/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+/* 老别称在前、新别称在后，去重后拼回一串 */
+function aliasMerge(oldVal, newVal) {
+    const out = [];
+    const push = (a) => { if (a && out.indexOf(a) < 0) out.push(a); };
+    aliasSplit(oldVal).forEach(push);
+    aliasSplit(newVal).forEach(push);
+    return out.join(ALIAS_SEP);
+}
+
+/* 正文里有没有提到这一组里某个档案的别称（单字别称太容易误伤，跳过） */
+function aliasHit(text, list, entries) {
+    const t = String(text || '');
+    if (!t || !Array.isArray(list)) return false;
+    for (const x of list) {
+        const rec = (entries || {})[x.name];
+        if (!rec) continue;
+        for (const a of aliasSplit(rec[ALIAS_FIELD])) {
+            if (a.length >= 2 && t.indexOf(a) >= 0) return true;
+        }
+    }
+    return false;
+}
+
 function pickSendRecords(text) {
     const entries = currentEntries();
-    const all = S.sendMode === 'all';
+    const all = false;   /* 发送范围设置已删掉：固定只发正文里被提到的角色 */
     const t = String(text || '');
     const groups = formGroups();
     const out = [];
@@ -2876,7 +3117,7 @@ function pickSendRecords(text) {
        这样「日常黑发洋装」和「变身后粉发战斗服」不会同时塞给 AI 打架。 */
     for (const [base, list] of groups) {
         if (base.length < 2) continue;
-        const mentioned = all || t.indexOf(base) >= 0;
+        const mentioned = all || t.indexOf(base) >= 0 || aliasHit(t, list, entries);
         const formHits = list.filter((x) => x.info.form && !x.info.isSealed && t.indexOf(x.info.form) >= 0);
         if (!mentioned && !formHits.length) continue;
         let pick;
@@ -2920,8 +3161,6 @@ function appendToPrompt(prompt, block) {
     return true;
 }
 
-let sendLast = null;   // 最近一次发送数据的结果，给面板显示
-
 function onSendData(kind, data) {
     try {
         if (!S.enabled || !S.sendEnabled) return;
@@ -2929,24 +3168,15 @@ function onSendData(kind, data) {
         if (sendStamp.has(data.prompt)) return;
         const baseText = promptTextOf(data.prompt);
         const baseTokens = estimateTokens(baseText);
-        sendLast = { kind, at: Date.now(), n: 0, tokens: 0, base: baseTokens, names: [] };
         const recs = pickSendRecords(baseText);
-        sendLast.n = recs.length;
-        sendLast.names = recs.map((r) => r.name);
-        if (!recs.length) {
-            sendLast.note = '正文里没提到已记录的角色，这次不发';
-            renderSendInfo();
-            return;
-        }
+        if (!recs.length) return;
         const block = buildSendBlock(recs);
         if (!appendToPrompt(data.prompt, block)) return;
         sendStamp.add(data.prompt);
-        sendLast.tokens = estimateTokens(block);
-        sendLast.total = baseTokens + sendLast.tokens;
+        const tokens = estimateTokens(block);
         log('发送数据 · ' + (SEND_LABELS[kind] || kind) + '：带上 ' +
             recs.length + ' 份 DNA（' + recs.map((r) => r.name).join('、') + '），'
-            + sendLast.tokens + ' token；请求合计 ' + sendLast.total + ' token');
-        renderSendInfo();
+            + tokens + ' token；请求合计 ' + (baseTokens + tokens) + ' token');
     } catch (e) {
         console.warn('[DNA] send data failed', e);
     }
@@ -2966,44 +3196,6 @@ function installSendHooks() {
         }
         /* 必须排在智绘姬自己的处理函数前面，否则它已经把请求发出去了 */
         if (typeof es.makeFirst === 'function') es.makeFirst(ev, hooked[ev]);
-    }
-}
-
-function renderSendInfo() {
-    const box = document.querySelector('#dna-tab [data-dna="sendInfo"]');
-    if (!box) return;
-    const rows = [
-        ['状态', S.sendEnabled ? '已启用' : '未启用'],
-        ['发给', sendTargets().map((k) => SEND_LABELS[k] || k).join(' / ') || '（没选）'],
-        ['范围', S.sendMode === 'all' ? '本库全部角色' : '只发正文里提到的角色'],
-        ['最近一次', sendLast
-            ? (fmtTime(sendLast.at) + ' · ' + (SEND_LABELS[sendLast.kind] || sendLast.kind) + ' · ' +
-                (sendLast.n
-                    ? (sendLast.n + ' 份 / DNA ' + sendLast.tokens + ' token'
-                        + (sendLast.total ? (' · 请求合计 ' + sendLast.total + ' token') : ''))
-                    : (sendLast.note || '没发')))
-            : '还没发过']
-    ];
-    box.innerHTML = rows.map((r) =>
-        '<div class="dna-kv-row"><span class="dna-kv-k">' + esc(r[0]) + '</span>' +
-        '<span class="dna-kv-v">' + esc(String(r[1])) + '</span></div>'
-    ).join('');
-}
-
-async function onSendPreview() {
-    const ta = document.querySelector('#dna-tab [data-dna="sendPreviewBox"]');
-    if (!ta) return;
-    try {
-        const bag = await collectChatText(clampInt(S.scanDepth, 1, 300, 3));
-        const recs = pickSendRecords(bag.text);
-        if (!recs.length) {
-            ta.value = '最近 ' + bag.count + ' 层 AI 回复里没提到任何已记录的角色，这次不会发。';
-        } else {
-            const block = buildSendBlock(recs);
-            ta.value = block + '\n\n【说明】这段 DNA 约 ' + estimateTokens(block) + ' token，会追加到智绘姬那条请求的末尾。';
-        }
-    } catch (e) {
-        ta.value = '预览失败：' + (e && e.message ? e.message : e);
     }
 }
 
@@ -3490,17 +3682,84 @@ const PANEL_HTML = `
 
   <!-- 子板块 -->
   <div class="st-chatu8-sub-nav dna-sub-nav" data-dna="subtabs">
-    <a href="#" class="st-chatu8-sub-nav-link active" data-dna-tab="lib"><i class="fa-solid fa-box-archive"></i> 档案库</a>
+    <a href="#" class="st-chatu8-sub-nav-link active" data-dna-tab="arch"><i class="fa-solid fa-box-archive"></i> 档案库</a>
+    <a href="#" class="st-chatu8-sub-nav-link" data-dna-tab="auto"><i class="fa-solid fa-robot"></i> 自动生成</a>
     <a href="#" class="st-chatu8-sub-nav-link" data-dna-tab="gen"><i class="fa-solid fa-wand-magic-sparkles"></i> 手动生成</a>
     <a href="#" class="st-chatu8-sub-nav-link" data-dna-tab="tools"><i class="fa-solid fa-paper-plane"></i> 发送 &amp; 日志</a>
     <a href="#" class="st-chatu8-sub-nav-link" data-dna-tab="settings"><i class="fa-solid fa-sliders"></i> 设置</a>
   </div>
 
-  <!-- ============ 档案库 ============ -->
-  <div class="dna-panel active" data-dna-panel="lib">
+  <!-- ============ 档案库：只管存角色档案 ============ -->
+  <div class="dna-panel active" data-dna-panel="arch">
 
     <div class="st-chatu8-settings-section">
-      <h3><i class="fa-solid fa-comment-dots"></i> AI 回复（实时）</h3>
+      <div class="dna-sec-head">
+        <h3><i class="fa-solid fa-box-archive"></i> 档案库 <span class="dna-count" data-dna="count">0</span></h3>
+        <div class="dna-sec-actions">
+          <button class="st-chatu8-btn" data-dna="lockAll" title="把本库所有档案锁上，AI 一条都改不了"><i class="fa-solid fa-lock"></i>全部锁定</button>
+          <button class="st-chatu8-btn" data-dna="unlockAll" title="把本库所有锁解开"><i class="fa-solid fa-lock-open"></i>全部解锁</button>
+          <button class="st-chatu8-btn" data-dna="export"><i class="fa-solid fa-file-export"></i>导出 JSON</button>
+          <button class="st-chatu8-btn" data-dna="import"><i class="fa-solid fa-file-import"></i>导入 JSON</button>
+          <button class="st-chatu8-btn danger" data-dna="clearAll"><i class="fa-solid fa-trash"></i>清空本库</button>
+        </div>
+      </div>
+      <div class="dna-status-row">
+        <span class="dna-badge" data-dna="cardLabel">—</span>
+        <span class="dna-badge" data-dna="lockCount">未锁定</span>
+        <span class="dna-hint dna-hint-inline" data-dna="storeHint"></span>
+      </div>
+      <div class="dna-hint dna-hint-inline">每行右边的小锁：锁住之后 AI（自动记录 / 手动生成）都不会再改这条档案，正文里的增量更新也不会动它；你自己要改的话先点小锁解锁。</div>
+      <div class="dna-split dna-split-solo">
+        <div class="dna-list" data-dna="list"></div>
+        <div class="dna-detail" data-dna="detail" style="display:none"></div>
+      </div>
+      <input type="file" accept=".json,application/json" data-dna="file" style="display:none">
+    </div>
+
+    <div class="st-chatu8-settings-section dna-fold" data-fold="archTpl">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-clipboard-list"></i> 档案模板</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="archTpl" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
+      <div class="dna-hint">
+        模板只管一件事：<b>这份档案有哪些字段</b>（决定落盘顺序、详情显示顺序、导出文本的样子）。内置的「默认模板」就是姓名 + 9 字段那套，改不了也删不掉。
+        想加自己的字段（比如「所属势力」「身高」），点 <b>新建模板</b> 或 <b>编辑模板</b>，一行一个字段填进去；也可以导出成 JSON 改好再导入。
+        选中哪个模板，之后的自动记录和手动生成就按它的字段表来。
+      </div>
+      <div class="st-chatu8-field">
+        <label>当前模板</label>
+        <select class="st-chatu8-select" data-dna="tplSelect"></select>
+      </div>
+      <div class="dna-status-row">
+        <span class="dna-badge" data-dna="tplBadge">默认模板</span>
+        <span class="dna-hint dna-hint-inline" data-dna="tplHint"></span>
+      </div>
+      <div class="dna-actions">
+        <button class="st-chatu8-btn" data-dna="tplNew"><i class="fa-solid fa-plus"></i>新建模板</button>
+        <button class="st-chatu8-btn" data-dna="tplEdit"><i class="fa-solid fa-pen-to-square"></i>编辑模板</button>
+        <button class="st-chatu8-btn" data-dna="tplExport"><i class="fa-solid fa-file-export"></i>导出模板</button>
+        <button class="st-chatu8-btn" data-dna="tplImport"><i class="fa-solid fa-file-import"></i>导入模板</button>
+        <button class="st-chatu8-btn" data-dna="tplDelete"><i class="fa-solid fa-trash"></i>删除这个模板</button>
+        <button class="st-chatu8-btn" data-dna="tplReset"><i class="fa-solid fa-rotate-left"></i>恢复默认模板</button>
+      </div>
+      <div class="st-chatu8-field-col">
+        <label>当前模板内容（只读，点「编辑模板」改）</label>
+        <textarea class="st-chatu8-textarea dna-mono" data-dna="tplPreview" rows="7" readonly></textarea>
+      </div>
+      <input type="file" accept=".json,application/json" data-dna="tplFile" style="display:none">
+      <div class="dna-hint dna-hint-inline">换模板只影响<b>之后</b>生成的档案；已有档案一条都不会动，详情里多出来的旧字段照样显示。</div>
+      <div class="dna-hint dna-hint-warn"><i class="fa-solid fa-triangle-exclamation"></i> 修改模板必须要修改对应的上下文预设——模板只提供字段表，字段规范 / 输出格式那些提示词写在预设里，不会跟着模板自动变。</div>
+    </div>
+  </div>
+
+  <!-- ============ 自动生成 ============ -->
+  <div class="dna-panel" data-dna-panel="auto">
+
+    <div class="st-chatu8-settings-section dna-fold" data-fold="libAI">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-comment-dots"></i> AI 回复（实时）</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="libAI" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
       <div class="dna-hint">
         自动记录、手动生成、测试请求，AI 回了什么都在这里实时显示——<b>不是测试专用</b>。
         原样，未做任何解析，生成过程中会一段一段往上涨。
@@ -3580,6 +3839,7 @@ const PANEL_HTML = `
                 <span class="st-chatu8-preset-box-group-label">管理</span>
                 <div class="st-chatu8-preset-box-grid">
                   <button type="button" class="st-chatu8-preset-box-item" data-dna="presetRename" title="重命名预设"><i class="fa-solid fa-pen"></i><span>改名</span></button>
+                  <button type="button" class="st-chatu8-preset-box-item" data-dna="presetReseed" title="把内置预设刷新成插件里的最新版本（自己导入 / 新建的预设不受影响）"><i class="fa-solid fa-rotate"></i><span>更新内置</span></button>
                 </div>
               </div>
               <div class="st-chatu8-preset-box-group">
@@ -3615,30 +3875,6 @@ const PANEL_HTML = `
     </div>
 
     <div class="st-chatu8-settings-section">
-      <div class="dna-sec-head">
-        <h3><i class="fa-solid fa-box-archive"></i> 档案库 <span class="dna-count" data-dna="count">0</span></h3>
-        <div class="dna-sec-actions">
-          <button class="st-chatu8-btn" data-dna="lockAll" title="把本库所有档案锁上，AI 一条都改不了"><i class="fa-solid fa-lock"></i>全部锁定</button>
-          <button class="st-chatu8-btn" data-dna="unlockAll" title="把本库所有锁解开"><i class="fa-solid fa-lock-open"></i>全部解锁</button>
-          <button class="st-chatu8-btn" data-dna="export"><i class="fa-solid fa-file-export"></i>导出 JSON</button>
-          <button class="st-chatu8-btn" data-dna="import"><i class="fa-solid fa-file-import"></i>导入 JSON</button>
-          <button class="st-chatu8-btn danger" data-dna="clearAll"><i class="fa-solid fa-trash"></i>清空本库</button>
-        </div>
-      </div>
-      <div class="dna-status-row">
-        <span class="dna-badge" data-dna="cardLabel">—</span>
-        <span class="dna-badge" data-dna="lockCount">未锁定</span>
-        <span class="dna-hint dna-hint-inline" data-dna="storeHint"></span>
-      </div>
-      <div class="dna-hint dna-hint-inline">每行右边的小锁：锁住之后 AI（自动记录 / 手动生成）都不会再改这条档案，正文里的增量更新也不会动它；你自己要改的话先点小锁解锁。</div>
-      <div class="dna-split dna-split-solo">
-        <div class="dna-list" data-dna="list"></div>
-        <div class="dna-detail" data-dna="detail" style="display:none"></div>
-      </div>
-      <input type="file" accept=".json,application/json" data-dna="file" style="display:none">
-    </div>
-
-    <div class="st-chatu8-settings-section">
       <h3><i class="fa-solid fa-scissors"></i> 正则 &amp; 测试工具</h3>
       <div class="dna-hint">
         自动记录前，正文会先过一遍智绘姬「正则」页签当前那份配置（条目 + 前后正则 + 文字正则）。
@@ -3668,13 +3904,29 @@ const PANEL_HTML = `
       </div>
       <div class="dna-hint" data-dna="testHint"></div>
     </div>
+
+    <div class="st-chatu8-settings-section">
+      <h3><i class="fa-solid fa-clock-rotate-left"></i> 扫描与记录节奏</h3>
+      <div class="dna-hint">自动记录的节奏：往回看几层、隔几层记一次。这里的「层」只算 <b>AI 输出的楼层</b>，你打的字一层都不算。</div>
+      <div class="st-chatu8-field">
+        <label>每次扫描最近 N 层 AI 回复</label>
+        <input type="number" min="1" max="300" class="st-chatu8-text-input" data-dna="scanDepth">
+      </div>
+      <div class="st-chatu8-field">
+        <label>自动记录间隔（每 N 层）</label>
+        <input type="number" min="1" max="50" class="st-chatu8-text-input" data-dna="autoEvery">
+      </div>
+    </div>
   </div>
 
   <!-- ============ 手动生成 ============ -->
   <div class="dna-panel" data-dna-panel="gen">
 
-    <div class="st-chatu8-settings-section">
-      <h3><i class="fa-solid fa-comment-dots"></i> AI 回复（实时）</h3>
+    <div class="st-chatu8-settings-section dna-fold" data-fold="genAI">
+      <div class="dna-fold-head">
+        <h3><i class="fa-solid fa-comment-dots"></i> AI 回复（实时）</h3>
+        <button type="button" class="dna-fold-btn" data-fold-btn="genAI" title="收起 / 展开这块"><i class="fa-solid fa-chevron-up"></i></button>
+      </div>
       <div class="dna-hint">
         手动生成、测试请求，AI 回了什么都在这里实时显示——<b>不是测试专用</b>。
         原样，未做任何解析，生成过程中会一段一段往上涨。
@@ -3753,6 +4005,7 @@ const PANEL_HTML = `
                 <span class="st-chatu8-preset-box-group-label">管理</span>
                 <div class="st-chatu8-preset-box-grid">
                   <button type="button" class="st-chatu8-preset-box-item" data-dna="genPresetRename" title="重命名预设"><i class="fa-solid fa-pen"></i><span>改名</span></button>
+                  <button type="button" class="st-chatu8-preset-box-item" data-dna="genPresetReseed" title="把内置预设刷新成插件里的最新版本（自己导入 / 新建的预设不受影响）"><i class="fa-solid fa-rotate"></i><span>更新内置</span></button>
                 </div>
               </div>
               <div class="st-chatu8-preset-box-group">
@@ -3792,7 +4045,8 @@ const PANEL_HTML = `
       <div class="dna-hint">
         世界书和角色是<b>两条独立的线</b>：各自勾、各自生成，谁都不用等谁。
         生成结果都直接写进「档案库」；组装用上面那份「手动生成预设」（没开就用内置提示词）。
-        世界书和角色都<b>只读</b>，不会改动原数据。
+        生成时世界书和角色都<b>只读</b>，不会自己改原数据；但条目右边的小眼睛可以让你<b>手动</b>看一眼原文、
+        改完再存回原处（酒馆世界书 / 智绘姬世界书），改完记得点「重新读取」让列表跟上。
       </div>
     </div>
 
@@ -3814,16 +4068,19 @@ const PANEL_HTML = `
         <button class="st-chatu8-btn" data-dna="genReload"><i class="fa-solid fa-rotate"></i>重新读取</button>
       </div>
       <div class="dna-hint dna-hint-inline" data-dna="genBookHint"></div>
-      <div class="dna-entry-head">
-        <span class="dna-entry-head-t">世界书条目 <span class="dna-count" data-dna="genEntryCount">0 / 0</span></span>
-        <span class="dna-entry-tools">
-          <input type="text" class="st-chatu8-text-input dna-search" data-dna="genEntrySearch" placeholder="搜条目…">
-          <button class="st-chatu8-btn dna-btn-sm" data-dna="genEntryAll">全选</button>
-          <button class="st-chatu8-btn dna-btn-sm" data-dna="genEntryNone">全不选</button>
-        </span>
+      <div class="dna-fold" data-fold="genEntryPick">
+        <div class="dna-entry-head dna-fold-head">
+          <span class="dna-entry-head-t">世界书条目 <span class="dna-count" data-dna="genEntryCount">0 / 0</span></span>
+          <span class="dna-entry-tools">
+            <button type="button" class="dna-fold-btn" data-fold-btn="genEntryPick" title="收起 / 展开条目列表"><i class="fa-solid fa-chevron-up"></i></button>
+            <input type="text" class="st-chatu8-text-input dna-search" data-dna="genEntrySearch" placeholder="搜条目…">
+            <button class="st-chatu8-btn dna-btn-sm" data-dna="genEntryAll">全选</button>
+            <button class="st-chatu8-btn dna-btn-sm" data-dna="genEntryNone">全不选</button>
+          </span>
+        </div>
+        <div class="dna-entries" data-dna="genEntryList"></div>
       </div>
-      <div class="dna-entries" data-dna="genEntryList"></div>
-      <div class="dna-hint dna-hint-inline">勾好条目就能直接生成，不用勾角色——勾到的条目里出现的每个具体人物都会建档，不会自己筛。</div>
+      <div class="dna-hint dna-hint-inline">勾好条目就能直接生成，不用勾角色——勾到的条目里出现的每个具体人物默认都会建档；只想建谁、只建几个，写在下面的「额外要求」里就行。</div>
       <div class="dna-actions">
         <button class="st-chatu8-btn" data-dna="genRunWorld"><i class="fa-solid fa-wand-magic-sparkles"></i>按世界书生成 DNA</button>
         <button class="st-chatu8-btn dna-btn-abort" data-dna="genAbortWorld" disabled><i class="fa-solid fa-stop"></i>中断请求</button>
@@ -3856,10 +4113,35 @@ const PANEL_HTML = `
     </div>
 
     <div class="st-chatu8-settings-section">
-      <h3><i class="fa-solid fa-file-import"></i> ③ 按导入文本生成</h3>
+      <h3><i class="fa-solid fa-layer-group"></i> 组合生成（世界书 + 角色 + 服装）</h3>
+      <div class="dna-entry-head">
+        <span class="dna-entry-head-t">③ 服装（智绘姬「服装」）<span class="dna-count" data-dna="genOutfitCount">0 / 0</span></span>
+        <span class="dna-entry-tools">
+          <input type="text" class="st-chatu8-text-input dna-search" data-dna="genOutfitSearch" placeholder="搜服装…">
+          <button class="st-chatu8-btn dna-btn-sm" data-dna="genOutfitAll">全选</button>
+          <button class="st-chatu8-btn dna-btn-sm" data-dna="genOutfitNone">全不选</button>
+        </span>
+      </div>
+      <div class="dna-entries dna-entries-sm" data-dna="genOutfitList"></div>
+      <div class="dna-hint">
+        组合生成：<b>①+②</b>、<b>①+③</b>、<b>②+③</b>、<b>①②③</b> 随便组合，勾到哪几条就用哪几条，塞进同一次请求，
+        同一个人只出一份档案，服装按「归属人」并进那个人的服装DNA。<b>③ 服装不能单独生成</b>——必须跟 ① 世界书或 ② 角色一起勾，
+        不然 AI 不知道这套衣服该记到谁头上。只勾 ① 或只勾 ② 也走得通（等于上面的「按世界书生成 / 按角色生成」）。
+      </div>
+      <div class="dna-hint dna-hint-inline">没写归属人的服装，按服装名自己判断归谁。
+        <b>只勾了 ③ 服装会拦下来</b>，请再勾上 ① 或 ②。</div>
+      <div class="dna-actions">
+        <button class="st-chatu8-btn" data-dna="genRunMix"><i class="fa-solid fa-wand-magic-sparkles"></i>组合生成 DNA</button>
+        <button class="st-chatu8-btn dna-btn-abort" data-dna="genAbortMix" disabled><i class="fa-solid fa-stop"></i>中断请求</button>
+        <button class="st-chatu8-btn" data-dna="genPreviewMix"><i class="fa-solid fa-eye"></i>预览</button>
+      </div>
+    </div>
+
+    <div class="st-chatu8-settings-section">
+      <h3><i class="fa-solid fa-file-import"></i> ④ 按导入文本生成</h3>
       <div class="dna-hint">
         手上有一份人物设定 / 小说片段 / 剧情梗概（<b>.txt</b>），直接导进来，让 AI 从里面把人挑出来建档。
-        和上面两条线一样：<b>只读文本，不改原文件</b>，生成结果写进「档案库」。
+        和上面几条线一样：<b>只读文本，不改原文件</b>，生成结果写进「档案库」。
       </div>
       <div class="dna-actions">
         <input type="file" accept=".txt,text/plain" data-dna="genTxtFile" style="display:none">
@@ -3871,7 +4153,17 @@ const PANEL_HTML = `
         <label>文本内容（导入后可以在这里改，改完直接按改过的生成）</label>
         <textarea class="st-chatu8-textarea dna-mono" data-dna="genTxtContent" rows="10" placeholder="点「选择 txt 文件」导入；也可以直接把内容粘到这里。"></textarea>
       </div>
-      <div class="dna-hint dna-hint-inline">自动识别 UTF-8 / GBK 编码。文件太大时（超过 10 万字）建议先删掉无关段落，不然容易超出模型上下文。</div>
+      <div class="dna-hint dna-hint-inline">自动识别 UTF-8 / GBK 编码。文本太长（几万字往上）就开下面的分段，别硬塞进一次请求。</div>
+      <div class="st-chatu8-field">
+        <label>分段生成tokens上限（0 = 不分段）</label>
+        <input type="number" min="0" max="200000" step="500" class="st-chatu8-text-input" data-dna="genTxtChunk">
+      </div>
+      <div class="dna-hint">按 <b>token</b> 算（中文大约 1 字 = 1 token）。超了就在段落之间切开，每段单独发一次请求，只有那一段进提示词。填 0 就是整篇一次发。</div>
+      <div class="dna-inline-row">
+        <select class="st-chatu8-select" data-dna="genTxtPart"></select>
+        <button class="st-chatu8-btn" data-dna="genTxtResplit"><i class="fa-solid fa-scissors"></i>重新分段</button>
+      </div>
+      <div class="dna-hint dna-hint-inline" data-dna="genTxtSegHint"></div>
       <div class="dna-actions">
         <button class="st-chatu8-btn" data-dna="genRunText"><i class="fa-solid fa-wand-magic-sparkles"></i>按文本生成 DNA</button>
         <button class="st-chatu8-btn dna-btn-abort" data-dna="genAbortText" disabled><i class="fa-solid fa-stop"></i>中断请求</button>
@@ -3906,7 +4198,8 @@ const PANEL_HTML = `
         <select class="st-chatu8-select" data-dna="genTestMode">
           <option value="world">① 按世界书条目生成</option>
           <option value="chars">② 按角色生成</option>
-          <option value="text">③ 按导入文本生成</option>
+          <option value="text">④ 按导入文本生成</option>
+          <option value="mix">组合生成（世界书 + 角色 + 服装）</option>
         </select>
       </div>
       <div class="dna-actions">
@@ -3938,22 +4231,9 @@ const PANEL_HTML = `
         <label>发送 DNA</label>
         <div class="st-chatu8-toggle"><input type="checkbox" data-dna="sendEnabled"><span class="st-chatu8-slider"></span></div>
       </div>
-      <div class="st-chatu8-field-col">
-        <label>发给哪几种请求</label>
-        <div class="dna-chips" data-dna="sendTargets"></div>
-      </div>
-      <div class="st-chatu8-field">
-        <label>发送范围</label>
-        <select class="st-chatu8-select" data-dna="sendMode"><option value="mentioned">只发正文里提到的角色</option><option value="all">发本库全部角色</option></select>
-      </div>
-      <div class="dna-actions">
-        <button class="st-chatu8-btn" data-dna="sendPreview"><i class="fa-solid fa-eye"></i>预览这次会发什么</button>
-        <button class="st-chatu8-btn" data-dna="sendClear">清空预览</button>
-      </div>
-      <div class="dna-kv" data-dna="sendInfo"></div>
-      <div class="st-chatu8-field-col">
-        <label>预览结果</label>
-        <textarea class="st-chatu8-textarea dna-mono" data-dna="sendPreviewBox" rows="6" readonly></textarea>
+      <div class="dna-hint dna-hint-inline">
+        固定只发当前正文里出场（被提到）的角色，按「本名」分组，同一个角色只发一个形态，不会把整库塞进去。
+        正文出 Tag / Tag 修改 / 角色展示 / 角色修改 / 视材准备，这几类请求都会带上；带了谁、多少字，记在下面「日志」里。
       </div>
     </div>
 
@@ -4008,14 +4288,6 @@ const PANEL_HTML = `
         <div class="st-chatu8-toggle"><input type="checkbox" data-dna="useRegex"><span class="st-chatu8-slider"></span></div>
       </div>
       <div class="st-chatu8-field">
-        <label>每次扫描最近 N 层 AI 回复</label>
-        <input type="number" min="1" max="300" class="st-chatu8-text-input" data-dna="scanDepth">
-      </div>
-      <div class="st-chatu8-field">
-        <label>自动记录间隔（每 N 层）</label>
-        <input type="number" min="1" max="50" class="st-chatu8-text-input" data-dna="autoEvery">
-      </div>
-      <div class="st-chatu8-field">
         <label>界面</label>
         <select class="st-chatu8-select" data-dna="uiMode"><option value="auto">自动检测</option><option value="desktop">一直用电脑版</option><option value="mobile">一直用手机版</option></select>
       </div>
@@ -4034,6 +4306,15 @@ const PANEL_HTML = `
         <div class="st-chatu8-toggle"><input type="checkbox" data-dna="breakTail"><span class="st-chatu8-slider"></span></div>
       </div>
     </div>
+
+    <div class="st-chatu8-settings-section">
+      <h3><i class="fa-solid fa-floppy-disk"></i> 保存</h3>
+      <div class="dna-hint">改哪一项都是立刻自动存盘的，这个按钮是给你一个「确定存住了」的落点：点一下会再写一次磁盘，顺手把界面状态刷一遍。</div>
+      <div class="dna-actions">
+        <button class="st-chatu8-btn" data-dna="saveAll"><i class="fa-solid fa-floppy-disk"></i>保存设置</button>
+        <span class="dna-hint dna-hint-inline" data-dna="saveHint"></span>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -4046,6 +4327,7 @@ const PANEL_HTML = `
 
 let genEntriesCache = [];   // 当前来源下能选的全部条目
 let genCharsCache = [];     // 智绘姬「角色管理」里的角色预设
+let genOutfitsCache = [];   // 智绘姬「服装」里的服装预设
 
 /* 酒馆世界书名列表（只读，不动任何数据） */
 async function stWorldNames() {
@@ -4123,6 +4405,40 @@ function chatu8CharPresets() {
     });
 }
 
+/* 智绘姬「服装」里的服装预设：{ 服装名: { nameCN, nameEN, owner, upperBody, ... } } */
+function chatu8OutfitPresets() {
+    let ch = null;
+    try { ch = extension_settings[CHATU8]; } catch (e) { ch = null; }
+    const p = (ch && ch.outfitPresets && typeof ch.outfitPresets === 'object') ? ch.outfitPresets : {};
+    return Object.keys(p).map((key) => {
+        const v = (p[key] && typeof p[key] === 'object') ? p[key] : {};
+        const owner = String(v.owner || '').trim();
+        return { key, name: key, owner, text: outfitText(key, v) };
+    });
+}
+
+const OUTFIT_FIELD_LABELS = {
+    upperBody: '上半身', upperBodyBack: '上半身（背面）',
+    fullBody: '全身', fullBodyBack: '全身（背面）',
+    photoPrompt: '照片提示词'
+};
+
+/* 一套服装压成一段给模型看的资料 */
+function outfitText(name, v) {
+    const val = (v && typeof v === 'object') ? v : {};
+    const owner = String(val.owner || '').trim();
+    const lines = ['—— 服装「' + String(name || '') + '」' + (owner ? ('（归属：' + owner + '）') : '（没写归属人）') + ' ——'];
+    for (const k of Object.keys(OUTFIT_FIELD_LABELS)) {
+        const t = String(val[k] || '').trim();
+        if (t) lines.push(OUTFIT_FIELD_LABELS[k] + '：' + t);
+    }
+    const extra = [];
+    if (String(val.nameCN || '').trim()) extra.push('中文名：' + String(val.nameCN).trim());
+    if (String(val.nameEN || '').trim()) extra.push('英文名：' + String(val.nameEN).trim());
+    if (lines.length === 1 && extra.length) lines.push(extra.join(' / '));
+    return lines.join('\n');
+}
+
 /* 角色预设字段的中文名（不认识的字段就不带标签直接列） */
 const CHAR_FIELD_LABELS = {
     nameCN: '中文名', nameEN: '英文名',
@@ -4175,7 +4491,9 @@ function renderGenEntries() {
             + '<input type="checkbox"' + (on ? ' checked' : '') + '>'
             + '<span class="dna-entry-name">' + esc(e.title) + '</span>'
             + '<span class="dna-entry-len">' + e.content.length + ' 字</span>'
-            + '</label></div></div>';
+            + '</label>'
+            + '<button type="button" class="dna-eye" data-genlook="' + esc(e.key) + '" title="看一眼这条的内容（可以改，也可以存回去）"><i class="fa-solid fa-eye"></i></button>'
+            + '</div></div>';
     }).join('');
     renderGenInfo();
 }
@@ -4209,6 +4527,51 @@ function renderGenChars() {
     renderGenInfo();
 }
 
+/* ---------- 渲染：服装列表 ---------- */
+function renderGenOutfits() {
+    const box = document.querySelector('#dna-tab [data-dna="genOutfitList"]');
+    if (!box) return;
+    const picked = new Set(S.genOutfits || []);
+    const sEl = document.querySelector('#dna-tab [data-dna="genOutfitSearch"]');
+    const q = String((sEl && sEl.value) || '').trim().toLowerCase();
+    const list = genOutfitsCache.filter((o) => !q || (o.name + ' ' + o.owner).toLowerCase().indexOf(q) >= 0);
+    if (!list.length) {
+        box.innerHTML = '<div class="dna-entries-empty">' +
+            (genOutfitsCache.length ? '没有匹配的服装' : '智绘姬「服装」里还没有服装预设') + '</div>';
+        renderGenInfo();
+        return;
+    }
+    box.innerHTML = list.map((o) => {
+        const on = picked.has(o.key);
+        return '<div class="dna-entry-item"><div class="dna-entry-line">'
+            + '<label class="dna-entry' + (on ? '' : ' dna-entry-off') + '" data-genoutfit="' + esc(o.key) + '" title="' + esc(o.text.slice(0, 400)) + '">'
+            + '<input type="checkbox"' + (on ? ' checked' : '') + '>'
+            + '<span class="dna-entry-name">' + esc(o.name) + (o.owner ? '（→ ' + esc(o.owner) + '）' : '') + '</span>'
+            + '<span class="dna-entry-len">' + (o.owner ? '归属 ' + esc(o.owner) : '没写归属') + '</span>'
+            + '</label></div></div>';
+    }).join('');
+    renderGenInfo();
+}
+
+function toggleGenOutfit(key, on) {
+    const set = new Set(S.genOutfits || []);
+    if (on) set.add(key); else set.delete(key);
+    S.genOutfits = [...set];
+    saveSettings(true);
+    renderGenInfo();
+}
+
+function setAllGenOutfits(on) {
+    const sEl = document.querySelector('#dna-tab [data-dna="genOutfitSearch"]');
+    const q = String((sEl && sEl.value) || '').trim().toLowerCase();
+    const list = genOutfitsCache.filter((o) => !q || (o.name + ' ' + o.owner).toLowerCase().indexOf(q) >= 0);
+    const set = new Set(S.genOutfits || []);
+    list.forEach((o) => { if (on) set.add(o.key); else set.delete(o.key); });
+    S.genOutfits = [...set];
+    saveSettings(true);
+    renderGenOutfits();
+}
+
 /* ---------- 渲染：手动加的角色 ---------- */
 function renderGenExtra() {
     const box = document.querySelector('#dna-tab [data-dna="genExtraList"]');
@@ -4238,11 +4601,19 @@ function pickedGenChars() {
     return out;
 }
 
+function pickedGenOutfits() {
+    const picked = new Set(S.genOutfits || []);
+    return genOutfitsCache.filter((o) => picked.has(o.key));
+}
+
 function renderGenInfo() {
     const box = document.querySelector('#dna-tab [data-dna="genInfo"]');
     if (!box) return;
     const entries = pickedGenEntries();
     const chars = pickedGenChars();
+    const outs = pickedGenOutfits();
+    const oCnt = document.querySelector('#dna-tab [data-dna="genOutfitCount"]');
+    if (oCnt) oCnt.textContent = outs.length + ' / ' + genOutfitsCache.length;
     const eCnt = document.querySelector('#dna-tab [data-dna="genEntryCount"]');
     if (eCnt) eCnt.textContent = entries.length + ' / ' + genEntriesCache.length;
     const cCnt = document.querySelector('#dna-tab [data-dna="genCharCount"]');
@@ -4252,6 +4623,7 @@ function renderGenInfo() {
         ['① 世界书', (S.genSource === 'chatu8' ? '智绘姬世界书' : ('酒馆世界书 · ' + (S.genBook || '未选')))
             + ' → ' + (entries.length ? ('已勾 ' + entries.length + ' 条 / ' + chars2 + ' 字') : '（还没勾）')],
         ['② 角色', chars.length ? ('已勾 ' + chars.length + ' 个：' + chars.map((c) => c.name).join('、')) : '（还没勾）'],
+        ['③ 服装', outs.length ? ('已勾 ' + outs.length + ' 套：' + outs.map((o) => o.name + (o.owner ? '→' + o.owner : '')).join('、')) : '（还没勾）'],
         ['组装方式', (presetEnabledOf('gen') && presetEntries(undefined, 'gen').length) ? ('手动生成预设「' + activePresetName('gen') + '」') : '插件内置提示词'],
         ['LLM 配置', currentProfileName('gen') || '（没选）']
     ];
@@ -4324,6 +4696,8 @@ async function onGenTxtFileChosen(file) {
         const ta = document.querySelector('#dna-tab [data-dna="genTxtContent"]');
         if (ta) ta.value = txt;
         genTxtRefresh();
+        S.genTxtPart = 0;
+        genTxtRefreshSeg();
         log('导入文本「' + S.genTxtName + '」：' + txt.length + ' 字');
         toast('已导入 ' + txt.length + ' 字');
     } catch (e) {
@@ -4339,61 +4713,125 @@ function onGenTxtClearFile() {
     saveSettings(true);
     const ta = document.querySelector('#dna-tab [data-dna="genTxtContent"]');
     if (ta) ta.value = '';
+    S.genTxtPart = 0;
     genTxtRefresh();
+    genTxtRefreshSeg();
 }
 
 /* ---------- 组装「正文」：三条线各说各的 ---------- */
-function buildGenText(mode, entries, chars, txt) {
+/* 'world' 只用世界书条目 / 'chars' 只用角色 / 'text' 只用导入的 txt /
+   'mix' = 组合生成：世界书 / 角色 / 服装按勾选任意组合成一次请求
+   （服装没有单独的 mode —— 它必须搭着世界书或角色一起走） */
+const GEN_MODES = ['world', 'chars', 'text', 'mix'];
+function genMode(mode) {
+    const v = String(mode == null ? '' : mode);
+    return GEN_MODES.indexOf(v) >= 0 ? v : 'world';
+}
+
+function buildGenText(mode, entries, chars, outs, txt) {
     const parts = [];
-    if (mode === 'text') {
+    const m = genMode(mode);
+    const hasE = (m === 'world' || m === 'mix');
+    const hasC = (m === 'chars' || m === 'mix');
+    const hasO = (m === 'mix');
+    if (m === 'text') {
         parts.push('【导入的文本资料】', String(txt || ''));
         parts.push('',
             '请从上面这份资料里，把出现的每一个具体人物各挑出来建一份 DNA 档案，一个都不许漏（泛称群体、地名、组织名不算人物）。',
             '资料里没写到的字段，按人物在文中表现出的气质和身份合理补全，不要留空、不要写“未知”。',
             '不要因为戏份少或只是提到一句就跳过某个具体人物，也不要额外编造资料里没有的人物。');
-    } else if (mode === 'chars') {
-        parts.push('【要建档的角色】');
-        for (const c of chars) parts.push('· ' + c.name + (c.brief ? '（设定见「角色卡设定」）' : ''));
-        parts.push('',
-            '请为上面列出的每个角色各出一份 DNA 档案，依据「角色卡设定」里的资料写。',
-            '设定里没写到的字段，按角色的气质和身份合理补全，不要留空、不要写“未知”。');
     } else {
-        parts.push('【世界书资料】');
-        for (const e of entries) parts.push('—— ' + e.title + ' ——\n' + e.content);
-        parts.push('',
-            '请为上面这些条目里出现的每一个具体人物各出一份 DNA 档案，一个都不许漏（泛称群体、地名、组织名不算人物）。',
-            '资料里没写到的字段，按这个世界观合理补全，不要留空、不要写“未知”。',
-            '不要因为戏份少或只是配角就跳过某个具体人物，也不要额外编造条目里没有的人物——收录范围由用户勾选决定。');
+        /* 三条线：勾了几条就拼几段，哪条没勾就整段不出现 */
+        if (hasE && entries.length) {
+            parts.push('【世界书资料】');
+            for (const e of entries) parts.push('—— ' + e.title + ' ——\n' + e.content);
+        }
+        if (hasC && chars.length) {
+            if (parts.length) parts.push('');
+            parts.push('【要建档的角色】');
+            for (const c of chars) parts.push('· ' + c.name + (c.brief ? '（设定见「角色卡设定」）' : '（没有设定，按名字和身份合理补全）'));
+        }
+        if (hasO && outs.length) {
+            if (parts.length) parts.push('');
+            parts.push('【服装资料】');
+            for (const o of outs) parts.push(o.text);
+        }
+        parts.push('');
+        if (m === 'chars' || (m === 'mix' && !entries.length && !outs.length)) {
+            parts.push(
+                '请为上面列出的每个角色各出一份 DNA 档案，依据「角色卡设定」里的资料写。',
+                '设定里没写到的字段，按角色的气质和身份合理补全，不要留空、不要写“未知”。');
+        } else if (m === 'mix') {
+            parts.push(
+                '请综合上面全部资料，为每一个出现的具体人物各出一份 DNA 档案，一个都不许漏（泛称群体、地名、组织名不算人物）。',
+                '同一个人只出一份档案：世界书里的资料 + 角色卡设定 + 服装资料合并写，服装按「归属人」并进那个人的服装DNA。',
+                '资料里没写到的字段，按世界观和人物气质合理补全，不要留空、不要写“未知”。',
+                '不要额外编造资料里没有的人物——收录范围由用户勾选决定。');
+        } else {
+            parts.push(
+                '请为上面这些条目里出现的每一个具体人物各出一份 DNA 档案，一个都不许漏（泛称群体、地名、组织名不算人物）。',
+                '资料里没写到的字段，按这个世界观合理补全，不要留空、不要写“未知”。',
+                '不要因为戏份少或只是配角就跳过某个具体人物，也不要额外编造条目里没有的人物——收录范围由用户勾选决定。');
+        }
     }
     const extra = String(S.genInstruction || '').trim();
     if (extra) parts.push('', '【额外要求】', extra);
     return parts.join('\n');
 }
 
-/* mode: 'world' = 只用勾到的世界书条目；'chars' = 只用勾到的角色；'text' = 只用导入的 txt */
-function buildGenPrompt(mode) {
-    const m = (mode === 'text') ? 'text' : ((mode === 'chars') ? 'chars' : 'world');
-    const entries = (m === 'world') ? pickedGenEntries() : [];
-    const chars = (m === 'chars') ? pickedGenChars() : [];
-    const txt = (m === 'text') ? genTxtGet() : '';
-    const text = buildGenText(m, entries, chars, txt);
+/* mode: 'world' = 只用勾到的世界书条目；'chars' = 只用勾到的角色；'text' = 只用导入的 txt；
+   'mix' = 组合生成（世界书 / 角色 / 服装按勾选组合） */
+function buildGenPrompt(mode, txtOverride) {
+    const m = genMode(mode);
+    const entries = (m === 'world' || m === 'mix') ? pickedGenEntries() : [];
+    const chars = (m === 'chars' || m === 'mix') ? pickedGenChars() : [];
+    const outs = (m === 'mix') ? pickedGenOutfits() : [];
+    /* txtOverride：分段生成时只喂这一段；不传就按当前选中的段（或不分段的全篇） */
+    const txt = (m === 'text')
+        ? (txtOverride === undefined ? genTxtSendText() : String(txtOverride || ''))
+        : '';
+    const text = buildGenText(m, entries, chars, outs, txt);
     const origins = chars.filter((c) => c.brief).map((c) => ({ name: c.name, content: c.brief }));
     /* 旧档案按本名从文本里找：导入的资料提到同一个角色也能命中已有档案 */
     const scanSrc = m === 'chars' ? chars.map((c) => c.name).join(' ') : (m === 'text' ? txt : text);
     const olds = S.updateExisting ? pickOldRecords(scanSrc, OLD_RECORD_BUDGET) : [];
-    return { mode: m, entries, chars, txt, text, origins, olds, prompt: buildRecordPrompt(text, { origins, olds }, 'gen') };
+    return { mode: m, entries, chars, outs, txt, text, origins, olds, prompt: buildRecordPrompt(text, { origins, olds }, 'gen') };
+}
+
+/* 这次到底喂了什么，写日志用 */
+function genBrief(g) {
+    const bits = [];
+    if (g && g.entries && g.entries.length) {
+        bits.push(g.entries.length + ' 条世界书条目 / ' + g.entries.reduce((n, e) => n + e.content.length, 0) + ' 字');
+    }
+    if (g && g.chars && g.chars.length) bits.push(g.chars.length + ' 个角色（' + g.chars.map((c) => c.name).join('、') + '）');
+    if (g && g.outs && g.outs.length) bits.push(g.outs.length + ' 套服装（' + g.outs.map((o) => o.name + (o.owner ? '→' + o.owner : '')).join('、') + '）');
+    if (g && String(g.txt || '').trim()) bits.push('导入文本 ' + String(g.txt || '').length + ' 字');
+    return bits.join(' + ') || '（什么都没勾）';
 }
 
 /* ---------- 预览 ---------- */
-const GEN_MODE_LABEL = { world: '按世界书生成', chars: '按角色生成', text: '按导入文本生成' };
+const GEN_MODE_LABEL = { world: '按世界书生成', chars: '按角色生成', text: '按导入文本生成', mix: '组合生成' };
+
+/* 组合生成合法性：返回空串＝能生成，否则是拦截原因。
+   允许 ① / ② / ①+② / ①+③ / ②+③ / ①②③；只勾 ③ 服装不行（AI 不知道该把衣服记给谁）。 */
+function mixBlockReason(g) {
+    const e = (g && g.entries) ? g.entries.length : 0;
+    const c = (g && g.chars) ? g.chars.length : 0;
+    const o = (g && g.outs) ? g.outs.length : 0;
+    if (!e && !c && !o) return '组合生成至少要勾一条线：① 世界书条目 或 ② 角色（服装得搭着它们走）。';
+    if (o && !e && !c) return '③ 服装不能单独生成：再勾上 ① 世界书条目 或 ② 角色，这套衣服才知道该记到谁头上。';
+    return '';
+}
 
 function onGenPreview(mode) {
-    const m = (mode === 'text') ? 'text' : ((mode === 'chars') ? 'chars' : 'world');
+    const m = genMode(mode);
     const ta = document.querySelector('#dna-tab [data-dna="genPreviewBox"]');
     if (!ta) return;
     const g = buildGenPrompt(m);
     if (m === 'world' && !g.entries.length) { ta.value = '先勾至少一条世界书条目，再预览。'; return; }
     if (m === 'chars' && !g.chars.length) { ta.value = '先勾至少一个角色，再预览。'; return; }
+    if (m === 'mix') { const r = mixBlockReason(g); if (r) { ta.value = r; return; } }
     if (m === 'text' && !String(g.txt || '').trim()) { ta.value = '先导入一份 txt（或者把内容粘进「文本内容」），再预览。'; return; }
     const msgs = normalizeMessages(g.prompt);
     ta.value = '【' + GEN_MODE_LABEL[m] + '】\n\n'
@@ -4406,7 +4844,7 @@ function onGenPreview(mode) {
 function genTestMode() {
     const sel = document.querySelector('#dna-tab [data-dna="genTestMode"]');
     const v = sel ? String(sel.value || '') : '';
-    return (v === 'text') ? 'text' : ((v === 'chars') ? 'chars' : 'world');
+    return genMode(v);
 }
 
 function genTestHint(text) {
@@ -4430,7 +4868,8 @@ function onGenTestPreview() {
         const g = buildGenPrompt(m);
         if (m === 'world' && !g.entries.length) { ta.value = '先在「① 按世界书条目生成」里勾至少一条条目。'; genTestHint(''); return; }
         if (m === 'chars' && !g.chars.length) { ta.value = '先在「② 按角色生成」里勾至少一个角色。'; genTestHint(''); return; }
-        if (m === 'text' && !String(g.txt || '').trim()) { ta.value = '先在「③ 按导入文本生成」里导入一份 txt。'; genTestHint(''); return; }
+        if (m === 'text' && !String(g.txt || '').trim()) { ta.value = '先在「④ 按导入文本生成」里导入一份 txt。'; genTestHint(''); return; }
+        if (m === 'mix') { const r = mixBlockReason(g); if (r) { ta.value = r; genTestHint(''); return; } }
         genTestFill(m, g);
         const msgs = normalizeMessages(g.prompt);
         genTestHint('组装完成：' + msgs.length + ' 条 / ' + promptChars(g.prompt) + ' 字（没发请求、不花钱）');
@@ -4451,7 +4890,8 @@ async function onGenTestLLM() {
         const g = buildGenPrompt(m);
         if (m === 'world' && !g.entries.length) { if (res) res.value = ''; genTestHint('先在「① 按世界书条目生成」里勾至少一条条目。'); return; }
         if (m === 'chars' && !g.chars.length) { if (res) res.value = ''; genTestHint('先在「② 按角色生成」里勾至少一个角色。'); return; }
-        if (m === 'text' && !String(g.txt || '').trim()) { if (res) res.value = ''; genTestHint('先在「③ 按导入文本生成」里导入一份 txt。'); return; }
+        if (m === 'text' && !String(g.txt || '').trim()) { if (res) res.value = ''; genTestHint('先在「④ 按导入文本生成」里导入一份 txt。'); return; }
+        if (m === 'mix') { const r = mixBlockReason(g); if (r) { if (res) res.value = ''; genTestHint(r); return; } }
         genTestFill(m, g);
         const api = resolveApi('gen');
         genTestHint('正在用 ' + api.source + ' · ' + api.model + ' 请求…（结果只显示，不写档案）');
@@ -4481,102 +4921,114 @@ async function onGenTestLLM() {
 
 /* ---------- 生成 ---------- */
 async function onGenDna(mode) {
-    const m = (mode === 'text') ? 'text' : ((mode === 'chars') ? 'chars' : 'world');
+    const m = genMode(mode);
     if (scanning) { toast('上一轮还在跑，等它跑完'); return; }
     if (!S.enabled) { toast('插件已停用，先打开「运行」里的启用插件'); return; }
-    const g = buildGenPrompt(m);
+    const jobs = buildGenJobs(m);
     if (m === 'chars') {
-        if (!g.chars.length) { toast('先在「按角色生成」里勾至少一个角色', 'error'); return; }
+        if (!jobs.length || !jobs[0].g.chars.length) { toast('先在「② 按角色生成」里勾至少一个角色', 'error'); return; }
+    } else if (m === 'mix') {
+        const g0 = jobs.length ? jobs[0].g : null;
+        const r = g0 ? mixBlockReason(g0) : '组合生成至少要勾一条线，再生成';
+        if (r) { toast(r, 'error'); return; }
     } else if (m === 'text') {
-        if (!String(g.txt || '').trim()) { toast('先在「按导入文本生成」里导入一份 txt', 'error'); return; }
+        if (!String(genTxtGet() || '').trim()) { toast('先在「按导入文本生成」里导入一份 txt', 'error'); return; }
+        if (!jobs.length) { toast('这个分段编号不存在，点「重新分段」再来', 'error'); return; }
     } else {
-        if (!g.entries.length) { toast('先在「按世界书条目生成」里勾至少一条条目', 'error'); return; }
+        if (!jobs.length || !jobs[0].g.entries.length) { toast('先在「按世界书条目生成」里勾至少一条条目', 'error'); return; }
     }
+    /* 会分几段发就提前说清楚：每段都是一次独立请求，都算钱 */
+    if (jobs.length > 1
+        && !confirm('这次会分 ' + jobs.length + ' 段依次生成（共 ' + jobs.length + ' 次请求）。\n\n'
+            + '想只发一段，就在「④ 按导入文本生成」的段下拉里挑一个。继续吗？')) return;
     /* 两条线统一按「真正发出去的量」估算：一次请求要装下全部勾选内容，
        装不下就会被截断，白花一次请求。这里只提醒，不硬拦。 */
     {
-        const ptok = estimateTokens(promptTextOf(g.prompt));
-        if (ptok > 30000 && !confirm('这次提示词约 ' + ptok + ' token（' + promptChars(g.prompt) + ' 字），'
-            + '接近或超过常见模型的上下文长度。\n\n建议先少勾几条，确定要继续吗？')) return;
+        let ptok = 0;
+        for (const j of jobs) ptok = Math.max(ptok, estimateTokens(promptTextOf(j.g.prompt)));
+        if (ptok > 30000 && !confirm('这次提示词最大约 ' + ptok + ' token，'
+            + '接近或超过常见模型的上下文长度。\n\n建议先少勾几条，或者把「分段生成tokens上限」调小。确定要继续吗？')) return;
     }
 
     setBusy(true, '生成中…');
     dnaBanner('DNA建档中', 'run');
+    let created = 0, updated = 0, skipped = 0, locked = 0, failed = 0;
+    let firstName = '';
     try {
-        log('手动生成（' + (m === 'world' ? '按世界书' : '按角色') + '）：'
-            + (m === 'world'
-                ? (g.entries.length + ' 条世界书条目 / ' + g.entries.reduce((n, e) => n + e.content.length, 0) + ' 字')
-                : (g.chars.length + ' 个角色（' + g.chars.map((c) => c.name).join('、') + '）')));
         const api = resolveApi('gen');
-        log('使用 ' + api.source + ' · ' + api.model + '（手动生成）');
-        logBreakthrough();
         const usePreset = presetEnabledOf('gen') && presetEntries(undefined, 'gen').length > 0;
-        log('提示词：' + (usePreset ? '手动生成预设「' + activePresetName('gen') + '」' : '插件内置 batchPrompt')
-            + ' · ' + (GEN_MODE_LABEL[m] || '') + ' · ' + promptChars(g.prompt) + ' 字 / '
-            + normalizeMessages(g.prompt).length + ' 条');
-        /* 重试由「自动重试次数」统一管：第 1 次用精简正文，第 2 次换成内置提示词 */
-        liveBegin('gen', '手动生成 · ' + (GEN_MODE_LABEL[m] || ''));
-        let raw;
-        try {
-            raw = await callSafe(
-                g.prompt,
-                buildRecordPrompt(clipText(g.text, 400), { origins: g.origins, olds: g.olds }, 'gen'),
-                'gen',
-                usePreset ? batchPrompt(g.text, { origins: g.origins, olds: g.olds }) : undefined,
-                S.replyMaxTokens,
-                (full) => liveDelta('gen', full)
-            );
-            liveEnd('gen', raw);
-        } catch (e) {
-            liveEnd('gen', '', (e && e.message) || e);
-            throw e;
-        }
-        const list = parseProfileList(raw);
-        if (!list) {
-            appendAiReplyMeta('gen', '解析失败，看原文');
-            log('AI 返回无法解析：' + String(raw || '').slice(0, 300), 'error');
-            toast('返回解析不了，看「AI 回复（实时）」', 'error');
-            return;
-        }
-        appendAiReplyMeta('gen', list.length + ' 份档案');
-        log('AI 返回 ' + list.length + ' 份档案');
-
-        let created = 0, updated = 0, skipped = 0, locked = 0, failed = 0;
-        const done = Object.create(null);
-        const floorTag = '手动生成';
-        for (const item of list) {
-            const prof = normalizeProfile(item, item && item['姓名']);
-            if (!prof || !String(prof['姓名'] || '').trim()) { failed++; continue; }
-            const nm = String(prof['姓名']).trim();
-            if (done[nm]) continue;
-            done[nm] = 1;
+        for (let ji = 0; ji < jobs.length; ji++) {
+            if (abortedNow()) { log('已中断，剩下 ' + (jobs.length - ji) + ' 段没有发'); break; }
+            const job = jobs[ji];
+            const g = job.g;
+            if (jobs.length > 1) log('—— 分段 ' + job.tag + ' ——');
+            log('手动生成（' + (GEN_MODE_LABEL[m] || '') + '）：' + genBrief(g));
+            log('使用 ' + api.source + ' · ' + api.model + '（手动生成）');
+            logBreakthrough();
+            log('提示词：' + (usePreset ? '手动生成预设「' + activePresetName('gen') + '」' : '插件内置 batchPrompt')
+                + ' · ' + (GEN_MODE_LABEL[m] || '') + ' · ' + promptChars(g.prompt) + ' 字 / '
+                + normalizeMessages(g.prompt).length + ' 条');
+            /* 重试由「自动重试次数」统一管：第 1 次用精简正文，第 2 次换成内置提示词 */
+            liveBegin('gen', '手动生成 · ' + (GEN_MODE_LABEL[m] || '') + (job.tag ? ' · ' + job.tag : ''));
+            let raw;
             try {
-                const res = saveProfile(prof, floorTag);
-                if (res.split) log('「' + nm + '」一条里写了多种形态，自动拆成 ' + res.results.length + ' 条档案');
-                for (const one of res.results) {
-                    if (one.r === 'created') { created++; log('新建「' + one.name + '」'); }
-                    else if (one.r === 'updated') { updated++; log('更新「' + one.name + '」'); }
-                    else if (one.r === 'locked') { locked++; log('「' + one.name + '」已锁定，AI 不改它'); }
-                    else { skipped++; log('跳过「' + one.name + '」（已建档，且没开「AI自动更新档案库」）'); }
-                }
+                raw = await callSafe(
+                    g.prompt,
+                    buildRecordPrompt(clipText(g.text, 400), { origins: g.origins, olds: g.olds }, 'gen'),
+                    'gen',
+                    usePreset ? batchPrompt(g.text, { origins: g.origins, olds: g.olds }) : undefined,
+                    S.replyMaxTokens,
+                    (full) => liveDelta('gen', full)
+                );
+                liveEnd('gen', raw);
             } catch (e) {
-                failed++;
-                log('「' + nm + '」写入失败：' + (e && e.message ? e.message : e), 'error');
+                liveEnd('gen', '', (e && e.message) || e);
+                throw e;
+            }
+            const list = parseProfileList(raw);
+            if (!list) {
+                appendAiReplyMeta('gen', '解析失败，看原文');
+                log('AI 返回无法解析：' + String(raw || '').slice(0, 300), 'error');
+                toast('返回解析不了，看「AI 回复（实时）」', 'error');
+                if (jobs.length === 1) return;
+                continue;
+            }
+            appendAiReplyMeta('gen', list.length + ' 份档案');
+            log('AI 返回 ' + list.length + ' 份档案');
+
+            const done = Object.create(null);
+            const floorTag = '手动生成';
+            for (const item of list) {
+                const prof = normalizeProfile(item, item && item['姓名']);
+                if (!prof || !String(prof['姓名'] || '').trim()) { failed++; continue; }
+                const nm = String(prof['姓名']).trim();
+                if (done[nm]) continue;
+                done[nm] = 1;
+                try {
+                    const res = saveProfile(prof, floorTag);
+                    if (res.split) log('「' + nm + '」一条里写了多种形态，自动拆成 ' + res.results.length + ' 条档案');
+                    for (const one of res.results) {
+                        if (one.r === 'created') { created++; log('新建「' + one.name + '」'); if (!firstName) firstName = one.name; }
+                        else if (one.r === 'updated') { updated++; log('更新「' + one.name + '」'); if (!firstName) firstName = one.name; }
+                        else if (one.r === 'locked') { locked++; log('「' + one.name + '」已锁定，AI 不改它'); }
+                        else { skipped++; log('跳过「' + one.name + '」（已建档，且没开「AI自动更新档案库」）'); }
+                    }
+                } catch (e) {
+                    failed++;
+                    log('「' + nm + '」写入失败：' + (e && e.message ? e.message : e), 'error');
+                }
             }
         }
         log('手动生成完成：新建 ' + created + ' · 更新 ' + updated + ' · 跳过 ' + skipped
             + (locked ? (' · 锁定跳过 ' + locked) : '') + ' · 失败 ' + failed);
         toast('生成完成：新建 ' + created + ' / 更新 ' + updated + (locked ? (' / 锁定跳过 ' + locked) : ''));
         renderList();
-        if (created + updated > 0) {
-            const first = String((list[0] && list[0]['姓名']) || '').trim();
-            if (first) { selected = first; renderList(); }
-        }
-        dnaBanner('建档成功', 'ok', 2600);
+        if (created + updated > 0 && firstName) { selected = firstName; renderList(); }
+        if (created + updated > 0) dnaBanner('建档成功', 'ok', 2600);
     } catch (e) {
         const msg = e && e.message ? e.message : String(e);
         if (/已手动中断/.test(msg)) {
-            log('手动生成已中断，没写任何档案');
+            log('手动生成已中断' + ((created + updated) ? ('：前面几段已经建档 ' + (created + updated) + ' 条，保留不动') : '，没写任何档案'));
             toast('已中断这次生成');
             dnaBanner('已中断', 'err', 2400);
         } else {
@@ -4716,8 +5168,10 @@ async function loadGenSource() {
         return;
     }
     genCharsCache = chatu8CharPresets();
+    genOutfitsCache = chatu8OutfitPresets();
     renderGenEntries();
     renderGenChars();
+    renderGenOutfits();
     renderGenInfo();
 }
 
@@ -4764,10 +5218,12 @@ function injectIntoChatu8() {
         tab.classList.add('active');
         bindPanel();
         renderList();
+        renderTemplateUI();
     });
 
     bindPanel();
     renderList();
+    renderTemplateUI();
     log('已挂载到智绘姬设置面板（侧栏「角色DNA」）');
     return true;
 }
@@ -4876,6 +5332,8 @@ function bindPresetSection(tab, scope) {
     if (exp) exp.addEventListener('click', () => exportPreset(scope));
     const ren = q('presetRename');
     if (ren) ren.addEventListener('click', () => renamePreset(scope));
+    const reseed = q('presetReseed');
+    if (reseed) reseed.addEventListener('click', () => onPresetReseed(scope));
     const rm = q('presetRemove');
     if (rm) rm.addEventListener('click', () => removePreset(scope));
     const pv = q('presetPreview');
@@ -4944,6 +5402,197 @@ function bindPresetSection(tab, scope) {
     });
 }
 
+
+/* ------------------------------ 导入文本：分段 ------------------------------ */
+/* 按 token 估算切段：先按空行/换行分块累加，单块自己就超上限的再按句子切，
+   单句还超的硬切。切出来的每一段单独发一次请求，提示词里只有这一段。 */
+function genTxtSegments(body) {
+    const text = String(body || '');
+    if (!text.trim()) return [];
+    const limit = clampInt(S.genTxtChunk, 0, 200000, 3000);
+    if (!limit) return [{ i: 0, text, chars: text.length, tokens: estimateTokens(text) }];
+    const out = [];
+    const blocks = text.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+    let acc = '';
+    const pushHard = (sent) => {
+        const step = Math.max(200, Math.floor(limit * 0.9));
+        for (let i = 0; i < sent.length; i += step) out.push(sent.slice(i, i + step));
+    };
+    for (const b of blocks) {
+        if (estimateTokens(b) > limit) {
+            if (acc.trim()) { out.push(acc); acc = ''; }
+            let cur = '';
+            for (const sent of b.split(/(?<=[。！？；!?;])/)) {
+                if (!sent) continue;
+                if (!cur && estimateTokens(sent) > limit) { pushHard(sent); continue; }
+                if (cur && estimateTokens(cur + sent) > limit) { out.push(cur); cur = ''; }
+                cur += sent;
+            }
+            if (cur.trim()) out.push(cur);
+            continue;
+        }
+        const next = acc ? (acc + '\n' + b) : b;
+        if (acc && estimateTokens(next) > limit) { out.push(acc); acc = b; }
+        else acc = next;
+    }
+    if (acc.trim()) out.push(acc);
+    return out.map((t, i) => ({ i, text: t, chars: t.length, tokens: estimateTokens(t) }));
+}
+
+/* 界面上选中的那段；分段关着、或选了「全部」时就是全篇 */
+function genTxtSendText() {
+    const body = genTxtGet();
+    const segs = genTxtSegments(body);
+    const part = clampInt(S.genTxtPart, 0, 9999, 0);
+    if (segs.length > 1 && part > 0 && segs[part - 1]) return segs[part - 1].text;
+    return body;
+}
+
+function genTxtRefreshSeg() {
+    const body = genTxtGet();
+    const segs = genTxtSegments(body);
+    const limit = clampInt(S.genTxtChunk, 0, 200000, 3000);
+    let part = clampInt(S.genTxtPart, 0, 9999, 0);
+    if (part > segs.length) { part = 0; S.genTxtPart = 0; }
+    const sel = document.querySelector('#dna-tab [data-dna="genTxtPart"]');
+    if (sel) {
+        sel.innerHTML = segs.length <= 1
+            ? '<option value="0">不分段（全文一次发）</option>'
+            : ('<option value="0">全部 ' + segs.length + ' 段依次生成</option>'
+                + segs.map((sg, i) => '<option value="' + (i + 1) + '">第 ' + (i + 1) + ' 段 · '
+                    + sg.chars + ' 字 / 约 ' + sg.tokens + ' token</option>').join(''));
+        sel.value = String(part);
+    }
+    const hint = document.querySelector('#dna-tab [data-dna="genTxtSegHint"]');
+    if (hint) {
+        if (!String(body || '').trim()) hint.textContent = '还没有文本，导入或粘一段再看分段。';
+        else if (segs.length <= 1) {
+            hint.textContent = '整篇 ' + body.length + ' 字 / 约 ' + estimateTokens(body) + ' token，'
+                + (limit ? ('没超过 ' + limit + ' token 的上限，不用分段。') : '分段关着，整篇一次发。');
+        } else if (part > 0) {
+            hint.textContent = '共 ' + segs.length + ' 段（上限 ' + limit + ' token/段）。这次只生成第 ' + part
+                + ' 段：' + segs[part - 1].chars + ' 字 / 约 ' + segs[part - 1].tokens + ' token。';
+        } else {
+            hint.textContent = '共 ' + segs.length + ' 段（上限 ' + limit + ' token/段）。这次会依次生成全部 '
+                + segs.length + ' 段，一共 ' + segs.length + ' 次请求。';
+        }
+    }
+}
+
+/* 一次点击要发几次请求：世界书/角色各一次；导入文本开了分段就是每段一次 */
+function buildGenJobs(m) {
+    if (m === 'text') {
+        const body = genTxtGet();
+        const segs = genTxtSegments(body);
+        let part = clampInt(S.genTxtPart, 0, 9999, 0);
+        if (part > segs.length) part = 0;
+        if (segs.length <= 1 || !part) {
+            if (segs.length <= 1) return [{ tag: '', g: buildGenPrompt('text', body) }];
+            return segs.map((sg, i) => ({
+                tag: '第 ' + (i + 1) + '/' + segs.length + ' 段',
+                g: buildGenPrompt('text', sg.text)
+            }));
+        }
+        return [{ tag: '第 ' + part + '/' + segs.length + ' 段', g: buildGenPrompt('text', segs[part - 1].text) }];
+    }
+    return [{ tag: '', g: buildGenPrompt(m) }];
+}
+
+/* ------------------------------ 世界书条目：看 / 改 / 存回去 ------------------------------ */
+function genEntryByKey(key) {
+    return (genEntriesCache || []).find((e) => e.key === key) || null;
+}
+
+function openGenEntryViewer(key) {
+    const e = genEntryByKey(key);
+    if (!e) { toast('这条已经不在列表里了，点「重新读取」再试', 'error'); return; }
+    const isCh = S.genSource === 'chatu8';
+    const srcName = isCh ? '智绘姬世界书' : '酒馆世界书';
+    dnaModalOpen('查看 / 编辑：' + e.title,
+        '<div class="dna-modal-meta">来源：' + esc(srcName)
+            + (e.keywords ? (' · 关键词：' + esc(e.keywords)) : '')
+            + ' · ' + e.content.length + ' 字</div>' +
+        '<div class="dna-modal-field"><label>条目内容（改完点右下角保存，会写回' + esc(srcName) + '）</label>' +
+            '<textarea class="st-chatu8-edit-input dna-mono" data-mv="content" rows="20">' + esc(e.content) + '</textarea></div>' +
+        '<div class="st-chatu8-edit-buttons dna-modal-foot">' +
+            '<button type="button" class="st-chatu8-edit-button cancel" data-modal-cancel>关闭</button>' +
+            '<button type="button" class="st-chatu8-edit-button send" data-modal-save>保存到' + esc(srcName) + '</button>' +
+        '</div>');
+    dnaModalWire(async (mask) => {
+        const ta = mask.querySelector('[data-mv="content"]');
+        const text = ta ? ta.value : '';
+        if (text === e.content) { dnaModalClose(); toast('内容没变，没写入'); return; }
+        const done = await saveGenEntryContent(key, text);
+        if (done) dnaModalClose();
+    });
+}
+
+async function saveGenEntryContent(key, text) {
+    const e = genEntryByKey(key);
+    if (!e) { toast('这条已经不在列表里了，点「重新读取」再试', 'error'); return false; }
+    const val = String(text == null ? '' : text);
+    try {
+        if (S.genSource === 'chatu8') {
+            const ch = extension_settings[CHATU8];
+            const node = ch && ch.worldBookList ? ch.worldBookList[e.title] : null;
+            if (!node) throw new Error('智绘姬世界书里找不到「' + e.title + '」');
+            node.content = val;
+            saveSettingsDebounced();
+            e.content = val;
+            renderGenEntries();
+            log('已保存智绘姬世界书「' + e.title + '」（' + val.length + ' 字）');
+            toast('已存回智绘姬世界书');
+            return true;
+        }
+        /* 酒馆世界书：key = 书名::uid。整本取回来、只改这一条，再整体写回，别的东西不动。 */
+        const cut = key.lastIndexOf('::');
+        if (cut < 0) throw new Error('条目 key 认不出来：' + key);
+        const book = key.slice(0, cut);
+        const uid = key.slice(cut + 2);
+        const res = await fetch('/api/worldinfo/get', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ name: book }),
+            cache: 'no-cache'
+        });
+        if (!res.ok) throw new Error('读取世界书失败：HTTP ' + res.status);
+        const data = await res.json();
+        const entries = (data && data.entries) || {};
+        const target = entries[uid];
+        if (!target) throw new Error('世界书「' + book + '」里找不到这条（uid ' + uid + '）');
+        target.content = val;
+        const w = await fetch('/api/worldinfo/edit', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            body: JSON.stringify({ name: book, data }),
+            cache: 'no-cache'
+        });
+        if (!w.ok) throw new Error('写入世界书失败：HTTP ' + w.status);
+        e.content = val;
+        renderGenEntries();
+        log('已保存酒馆世界书「' + book + '」的条目「' + e.title + '」（' + val.length + ' 字）');
+        toast('已存回酒馆世界书（酒馆里没变就切一下世界书页签刷一下）');
+        return true;
+    } catch (err) {
+        const msg = err && err.message ? err.message : String(err);
+        log('保存世界书条目失败：' + msg, 'error');
+        toast('保存失败：' + msg, 'error');
+        return false;
+    }
+}
+
+/* ------------------------------ 设置：手动保存 ------------------------------ */
+function onSaveAll() {
+    saveSettings(true);
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const hhmm = p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
+    const h = document.querySelector('#dna-tab [data-dna="saveHint"]');
+    if (h) h.textContent = '已保存 · ' + hhmm;
+    log('设置已手动保存（' + hhmm + '）');
+    toast('设置已保存');
+}
+
 function bindPanel() {
     const tab = document.querySelector('#dna-tab');
     if (!tab || tab.dataset.bound === '1') return;
@@ -4955,7 +5604,7 @@ function bindPanel() {
     const subTabs = Array.from(tab.querySelectorAll('.st-chatu8-sub-nav-link'));
     const subPanels = Array.from(tab.querySelectorAll('.dna-panel'));
     const showSub = (name) => {
-        if (!name || !subPanels.some((p) => p.dataset.dnaPanel === name)) name = 'lib';
+        if (!name || !subPanels.some((p) => p.dataset.dnaPanel === name)) name = 'arch';
         subTabs.forEach((b) => b.classList.toggle('active', b.dataset.dnaTab === name));
         subPanels.forEach((p) => p.classList.toggle('active', p.dataset.dnaPanel === name));
         tab.dataset.sub = name;
@@ -4970,7 +5619,7 @@ function bindPanel() {
             showSub(b.dataset.dnaTab);
         });
     });
-    showSub(tab.dataset.sub || 'lib');
+    showSub(tab.dataset.sub || 'arch');
     applyFolds();
     bindPresetBoxes(tab);
 
@@ -4990,8 +5639,10 @@ function bindPanel() {
         tab.querySelector('[data-dna="scanDepth"]').value = S.scanDepth;
         tab.querySelector('[data-dna="autoEvery"]').value = S.autoEvery;
         tab.querySelector('[data-dna="uiMode"]').value = S.uiMode || 'auto';
+        const gtc = tab.querySelector('[data-dna="genTxtChunk"]');
+        if (gtc) gtc.value = String(S.genTxtChunk);
+        genTxtRefreshSeg();
         tab.querySelector('[data-dna="sendEnabled"]').checked = !!S.sendEnabled;
-        tab.querySelector('[data-dna="sendMode"]').value = S.sendMode === 'all' ? 'all' : 'mentioned';
         const pe = tab.querySelector('[data-dna="presetEnabled"]');
         if (pe) pe.checked = !!S.presetEnabled;
         const pm = tab.querySelector('[data-dna="presetMergeSystem"]');
@@ -5000,14 +5651,6 @@ function bindPanel() {
         if (gpe) gpe.checked = !!S.genPresetEnabled;
         const gpm = tab.querySelector('[data-dna="genPresetMergeSystem"]');
         if (gpm) gpm.checked = S.genPresetMergeSystem !== false;
-        const tbox = tab.querySelector('[data-dna="sendTargets"]');
-        if (tbox) {
-            const on = new Set(sendTargets());
-            tbox.innerHTML = Object.keys(SEND_EVENTS).map((k) =>
-                '<label class="dna-check"><input type="checkbox" data-send-kind="' + k + '"' +
-                (on.has(k) ? ' checked' : '') + '><span>' + esc(SEND_LABELS[k]) + '</span></label>'
-            ).join('');
-        }
         const gs = tab.querySelector('[data-dna="genSource"]');
         if (gs) gs.value = S.genSource === 'chatu8' ? 'chatu8' : 'st';
         const gfc = tab.querySelector('[data-dna="genBookFollowCard"]');
@@ -5066,27 +5709,6 @@ function bindPanel() {
     tab.querySelector('[data-dna="sendEnabled"]').addEventListener('change', (e) => {
         S.sendEnabled = !!e.target.checked;
         saveSettings(true);
-        renderSendInfo();
-    });
-    tab.querySelector('[data-dna="sendMode"]').addEventListener('change', (e) => {
-        S.sendMode = e.target.value === 'all' ? 'all' : 'mentioned';
-        saveSettings(true);
-        renderSendInfo();
-    });
-    tab.querySelector('[data-dna="sendTargets"]').addEventListener('change', (e) => {
-        const cb = e.target.closest('input[type="checkbox"]');
-        if (!cb) return;
-        const kind = cb.dataset.sendKind;
-        const set = new Set(sendTargets());
-        if (cb.checked) set.add(kind); else set.delete(kind);
-        S.sendTargets = Array.from(set);
-        saveSettings(true);
-        renderSendInfo();
-    });
-    tab.querySelector('[data-dna="sendPreview"]').addEventListener('click', onSendPreview);
-    tab.querySelector('[data-dna="sendClear"]').addEventListener('click', () => {
-        const ta = tab.querySelector('[data-dna="sendPreviewBox"]');
-        if (ta) ta.value = '';
     });
 
     bindPresetSection(tab, 'lib');
@@ -5129,6 +5751,13 @@ function bindPanel() {
     });
     tab.querySelector('[data-dna="genReload"]').addEventListener('click', () => loadGenSource());
     tab.querySelector('[data-dna="genEntrySearch"]').addEventListener('input', () => renderGenEntries());
+    tab.querySelector('[data-dna="genEntryList"]').addEventListener('click', (e) => {
+        const eye = e.target.closest('[data-genlook]');
+        if (!eye) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openGenEntryViewer(eye.dataset.genlook);
+    });
     tab.querySelector('[data-dna="genEntryAll"]').addEventListener('click', () => setAllGenEntries(true));
     tab.querySelector('[data-dna="genEntryNone"]').addEventListener('click', () => setAllGenEntries(false));
     tab.querySelector('[data-dna="genEntryList"]').addEventListener('change', (e) => {
@@ -5177,10 +5806,24 @@ function bindPanel() {
         S.genInstruction = e.target.value || '';
         saveSettings(true);
     });
+    tab.querySelector('[data-dna="genOutfitSearch"]').addEventListener('input', () => renderGenOutfits());
+    tab.querySelector('[data-dna="genOutfitAll"]').addEventListener('click', () => setAllGenOutfits(true));
+    tab.querySelector('[data-dna="genOutfitNone"]').addEventListener('click', () => setAllGenOutfits(false));
+    tab.querySelector('[data-dna="genOutfitList"]').addEventListener('change', (e) => {
+        const cb = e.target;
+        if (!cb || cb.type !== 'checkbox') return;
+        const row = cb.closest('[data-genoutfit]');
+        if (!row) return;
+        row.classList.toggle('dna-entry-off', !cb.checked);
+        toggleGenOutfit(row.dataset.genoutfit, !!cb.checked);
+    });
     tab.querySelector('[data-dna="genRunWorld"]').addEventListener('click', () => onGenDna('world'));
     tab.querySelector('[data-dna="genPreviewWorld"]').addEventListener('click', () => onGenPreview('world'));
     tab.querySelector('[data-dna="genRunChars"]').addEventListener('click', () => onGenDna('chars'));
     tab.querySelector('[data-dna="genPreviewChars"]').addEventListener('click', () => onGenPreview('chars'));
+
+    tab.querySelector('[data-dna="genRunMix"]').addEventListener('click', () => onGenDna('mix'));
+    tab.querySelector('[data-dna="genPreviewMix"]').addEventListener('click', () => onGenPreview('mix'));
 
     /* ③ 按导入文本生成 */
     tab.querySelector('[data-dna="genTxtPick"]').addEventListener('click', () => onGenTxtPick());
@@ -5194,6 +5837,23 @@ function bindPanel() {
         genTxtBody = e.target.value || '';
         genTxtRefresh();
     });
+    tab.querySelector('[data-dna="genTxtChunk"]').addEventListener('change', (e) => {
+        S.genTxtChunk = clampInt(e.target.value, 0, 200000, 3000);
+        e.target.value = String(S.genTxtChunk);
+        S.genTxtPart = 0;
+        saveSettings(true);
+        genTxtRefreshSeg();
+    });
+    tab.querySelector('[data-dna="genTxtPart"]').addEventListener('change', (e) => {
+        S.genTxtPart = clampInt(e.target.value, 0, 9999, 0);
+        saveSettings(true);
+        genTxtRefreshSeg();
+    });
+    tab.querySelector('[data-dna="genTxtResplit"]').addEventListener('click', () => {
+        genTxtRefreshSeg();
+        toast('已按当前上限重新分段');
+    });
+    tab.querySelector('[data-dna="genTxtContent"]').addEventListener('change', () => genTxtRefreshSeg());
     tab.querySelector('[data-dna="genRunText"]').addEventListener('click', () => onGenDna('text'));
     tab.querySelector('[data-dna="genPreviewText"]').addEventListener('click', () => onGenPreview('text'));
     tab.querySelector('[data-dna="genClear"]').addEventListener('click', () => {
@@ -5216,6 +5876,8 @@ function bindPanel() {
     tab.querySelector('[data-dna="aiReplyLibClear"]').addEventListener('click', () => clearAiReply('lib'));
     tab.querySelector('[data-dna="aiReplyGenCopy"]').addEventListener('click', () => copyAiReply('gen'));
     tab.querySelector('[data-dna="aiReplyGenClear"]').addEventListener('click', () => clearAiReply('gen'));
+    const saveAllBtn = tab.querySelector('[data-dna="saveAll"]');
+    if (saveAllBtn) saveAllBtn.addEventListener('click', () => onSaveAll());
     tab.querySelector('[data-dna="clearTest"]').addEventListener('click', () => {
         ['testInput', 'testCleaned', 'testPrompt', 'testResult'].forEach((k) => setTestField(k, ''));
         testHint('');
@@ -5258,6 +5920,17 @@ function bindPanel() {
     tab.querySelector('[data-dna="export"]').addEventListener('click', exportRecords);
     tab.querySelector('[data-dna="import"]').addEventListener('click', () => tab.querySelector('[data-dna="file"]').click());
     tab.querySelector('[data-dna="file"]').addEventListener('change', importRecords);
+
+    /* 档案模板 */
+    const tplSel = tab.querySelector('[data-dna="tplSelect"]');
+    if (tplSel) tplSel.addEventListener('change', () => onTplSelect(tplSel));
+    tab.querySelector('[data-dna="tplNew"]').addEventListener('click', onTplNew);
+    tab.querySelector('[data-dna="tplEdit"]').addEventListener('click', onTplEdit);
+    tab.querySelector('[data-dna="tplExport"]').addEventListener('click', onTplExport);
+    tab.querySelector('[data-dna="tplImport"]').addEventListener('click', () => tab.querySelector('[data-dna="tplFile"]').click());
+    tab.querySelector('[data-dna="tplFile"]').addEventListener('change', onTplImport);
+    tab.querySelector('[data-dna="tplDelete"]').addEventListener('click', onTplDelete);
+    tab.querySelector('[data-dna="tplReset"]').addEventListener('click', onTplReset);
     tab.querySelector('[data-dna="clearAll"]').addEventListener('click', () => {
         const b = bucket(cardKey(), false);
         const n = b ? Object.keys(b.entries).length : 0;
@@ -5320,11 +5993,21 @@ function bindPanel() {
             log('手动切换形态：' + base + ' → ' + fname + '（[当前] 已移过去）');
             return;
         }
+        /* 单个字段的小锁 */
+        const flBtn = e.target.closest('[data-lockfield]');
+        if (flBtn) {
+            toggleFieldLock(flBtn.dataset.lockfield);
+            return;
+        }
         /* 字段编辑：弹悬浮窗改，不挤在面板里 */
         const editBtn = e.target.closest('[data-editfield]');
         if (editBtn && selected) {
             if (isLocked(selected)) {
                 toast('「' + selected + '」已锁定，先点小锁解锁再改', 'error');
+                return;
+            }
+            if (fieldLocked(editBtn.dataset.editfield)) {
+                toast('「' + editBtn.dataset.editfield + '」这个字段已锁，先点它旁边的小锁', 'error');
                 return;
             }
             const k = editBtn.dataset.editfield;
@@ -5443,7 +6126,6 @@ function updateDerivedUI() {
     }
     refreshLLMCard();
     renderRegexInfo();
-    renderSendInfo();
     applyUiMode();
 }
 
@@ -5496,6 +6178,10 @@ function renderList() {
         const active = (selected === n) ? ' dna-item-active' : '';
         const lk = !!rec._locked;
         const fi = x.info;
+        const aliases = aliasSplit(rec[ALIAS_FIELD]);
+        const aliasHtml = aliases.length
+            ? '<span class="dna-item-alias" title="别称：' + esc(aliases.join(ALIAS_SEP)) + '">' + esc(aliases.join(ALIAS_SEP)) + '</span>'
+            : '';
         /* 形态档案：显示「本名 · 形态名」+ 状态徽标，一眼看出是同一个人的不同形态 */
         const nameHtml = fi.isForm
             ? ('<span class="dna-form-base">' + esc(fi.base) + '</span>' +
@@ -5504,7 +6190,7 @@ function renderList() {
                     (fi.isCurrent ? ' is-cur' : (fi.isSealed ? ' is-seal' : '')) + '">' + esc(fi.tag) + '</span>' : ''))
             : esc(n);
         return '<div class="dna-item' + active + (lk ? ' dna-item-locked' : '') + (fi.isForm ? ' dna-item-form' : '') + '" data-name="' + esc(n) + '">' +
-            '<span class="dna-item-name">' + (lk ? '<i class="fa-solid fa-lock dna-lock-ico"></i>' : '') + nameHtml + '</span>' +
+            '<span class="dna-item-name">' + (lk ? '<i class="fa-solid fa-lock dna-lock-ico"></i>' : '') + nameHtml + aliasHtml + '</span>' +
             '<span class="dna-item-time">' + esc(fmtTime(rec._updated)) + '</span>' +
             '<button class="dna-mini dna-mini-lock' + (lk ? ' is-locked' : '') + '" data-act="lock" title="' +
             (lk ? '已锁定：AI 不会改这条（点一下解锁）' : '未锁定：点一下锁住，AI 就不会再改这条') + '">' +
@@ -5523,8 +6209,8 @@ function renderList() {
     }
 
     const rec = entries[selected];
-    /* 详情按 DNA_FIELDS 的顺序展示（姓名在标题上，不重复） */
-    const rows = DNA_FIELDS.filter((k) => k !== '姓名').map((k) => [k, rec[k]]);
+    /* 详情按当前模板的字段顺序展示（姓名在标题上，不重复；旧档案多出来的字段跟在后） */
+    const rows = tplDetailFields(rec).map((k) => [k, rec[k]]);
     detail.style.display = '';
     const sp2 = tab.querySelector('.dna-split');
     if (sp2) sp2.classList.remove('dna-split-solo');
@@ -5552,21 +6238,197 @@ function renderList() {
         '<button class="dna-mini" data-copy="all">复制全部</button></div>' + formLine +
         rows.map(([k, v]) => {
             const open = (editingField === k);
-            const lked = !!rec._locked;
+            const flock = fieldLocked(k);
+            const lked = !!rec._locked || flock;
             const head = '<div class="dna-field-h">' + esc(k) +
+                '<button class="dna-mini dna-mini-lock' + (flock ? ' is-locked' : '') + '" data-lockfield="' + esc(k) + '" title="' +
+                (flock
+                    ? '这个字段已锁：AI 不会改写它，也不能手动编辑（点一下解锁）'
+                    : '未锁：点一下锁住这个字段，AI 和手动编辑都不会再改它') + '">' +
+                '<i class="fa-solid ' + (flock ? 'fa-lock' : 'fa-lock-open') + '"></i></button>' +
                 '<button class="dna-mini" data-copy="' + esc(k) + '">复制</button>' +
                 '<button class="dna-mini' + (open ? ' dna-mini-on' : '') + (lked ? ' dna-mini-dis' : '') +
-                '" data-editfield="' + esc(k) + '" title="' + (lked ? '已锁定，先解锁再改' : '编辑这个字段') + '">' +
+                '" data-editfield="' + esc(k) + '" title="' +
+                (lked ? (flock ? '这个字段已锁，先点它旁边的小锁' : '已锁定，先解锁再改') : '编辑这个字段') + '">' +
                 (open ? '收起' : '编辑') + '</button></div>';
             if (!open) {
-                return '<div class="dna-field">' + head +
+                return '<div class="dna-field' + (flock ? ' is-fieldlocked' : '') + '">' + head +
                     '<div class="dna-field-v">' + (v ? esc(v) : '<span class="dna-empty-inline">（空）</span>') + '</div></div>';
             }
-            return '<div class="dna-field">' + head +
+            return '<div class="dna-field' + (flock ? ' is-fieldlocked' : '') + '">' + head +
                 '<textarea class="st-chatu8-textarea dna-mono" data-fieldbox="' + esc(k) + '" rows="6">' + esc(v || '') + '</textarea>' +
                 '<div class="dna-actions"><button class="st-chatu8-btn" data-fact="save"><i class="fa-solid fa-check"></i>保存</button>' +
                 '<button class="st-chatu8-btn" data-fact="cancel">取消</button></div></div>';
         }).join('');
+}
+
+/* ------------------------------ 档案模板 UI ------------------------------ */
+function tplNames() {
+    return Object.keys(S.dnaTemplates || {});
+}
+
+function renderTemplateUI() {
+    const tab = document.querySelector('#dna-tab');
+    if (!tab) return;
+    const sel = tab.querySelector('[data-dna="tplSelect"]');
+    if (sel) {
+        sel.innerHTML = '<option value="">默认模板（内置）</option>' +
+            tplNames().map((n) => '<option value="' + esc(n) + '">' + esc(n) + '</option>').join('');
+        sel.value = tplIsDefault() ? '' : S.dnaTemplate;
+    }
+    const badge = tab.querySelector('[data-dna="tplBadge"]');
+    if (badge) badge.textContent = tplIsDefault() ? '默认模板（内置）' : S.dnaTemplate;
+    const hint = tab.querySelector('[data-dna="tplHint"]');
+    if (hint) hint.textContent = tplFields().length + ' 个字段（字段规范 / 输出格式由上下文预设提供）';
+    const pv = tab.querySelector('[data-dna="tplPreview"]');
+    if (pv) pv.value = JSON.stringify(templateExport(''), null, 2);
+}
+
+function onTplSelect(sel) {
+    const v = String((sel && sel.value) || '');
+    S.dnaTemplate = (v && (S.dnaTemplates || {})[v]) ? v : '';
+    saveSettings(true);
+    renderTemplateUI();
+    log('档案模板切到：' + (tplIsDefault() ? '默认模板' : S.dnaTemplate));
+}
+
+function onTplExport() {
+    const payload = templateExport('');
+    if (!payload) { toast('没有可导出的模板'); return; }
+    try { payload.name = payload.name || '默认模板'; } catch (e) { /* 忽略 */ }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safe = String(payload.name).replace(/[\\/:*?"<>|]/g, '_');
+    a.href = url;
+    a.download = 'DNA档案模板_' + safe + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    log('已导出模板：' + payload.name);
+    toast('已导出模板：' + payload.name);
+}
+
+/* 一个文件里可以放一份，也可以放多份（数组 / {templates:{名:…}}） */
+function onTplImport(ev) {
+    const input = ev.target;
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            const data = JSON.parse(String(reader.result || ''));
+            const list = [];
+            if (Array.isArray(data)) list.push.apply(list, data);
+            else if (data && Array.isArray(data.templates)) list.push.apply(list, data.templates);
+            else if (data && data.templates && typeof data.templates === 'object') {
+                for (const k of Object.keys(data.templates)) {
+                    list.push(Object.assign({ name: k }, data.templates[k] || {}));
+                }
+            } else if (data && typeof data === 'object') list.push(data);
+            if (!list.length) throw new Error('文件里没找到模板');
+            const names = [];
+            for (let i = 0; i < list.length; i++) {
+                const t = normalizeTemplate(list[i], '导入模板' + (i + 1));
+                S.dnaTemplates[t.name] = t;
+                names.push(t.name);
+            }
+            S.dnaTemplate = names[names.length - 1] || '';
+            saveSettings(true);
+            renderTemplateUI();
+            log('导入模板 ' + names.length + ' 份：' + names.join('、'));
+            toast('导入模板 ' + names.length + ' 份，已切到「' + names[names.length - 1] + '」');
+        } catch (e) {
+            log('模板导入失败：' + (e && e.message ? e.message : e), 'error');
+            toast('模板导入失败：' + (e && e.message ? e.message : e), 'error');
+        } finally {
+            input.value = '';
+        }
+    };
+    reader.readAsText(file, 'utf-8');
+}
+
+function onTplDelete() {
+    if (tplIsDefault()) { toast('默认模板是内置的，删不掉'); return; }
+    const nm = S.dnaTemplate;
+    if (!confirm('删除模板「' + nm + '」？（已经在档案里的内容不受影响）')) return;
+    delete S.dnaTemplates[nm];
+    S.dnaTemplate = '';
+    saveSettings(true);
+    renderTemplateUI();
+    log('已删除模板：' + nm + '（回到默认模板）');
+    toast('已删除模板：' + nm);
+}
+
+function onTplReset() {
+    S.dnaTemplate = '';
+    saveSettings(true);
+    renderTemplateUI();
+    toast('已切回默认模板');
+}
+
+/* 模板只提供字段表，提示词在预设里 —— 这句在面板和编辑弹窗里各露一次 */
+const TPL_SYNC_NOTE = '修改模板必须要修改对应的上下文预设：模板只提供字段表，字段规范 / 输出格式那些提示词写在预设里，不会跟着模板自动变。';
+
+/* 打开模板编辑器：name 留空 = 新建（用当前模板的字段做底，方便二创） */
+function openTplEditor(name) {
+    const key = String(name || '');
+    const bag = S.dnaTemplates || {};
+    const cur = (key && bag[key]) ? bag[key] : null;
+    const isNew = !cur;
+    const tname = cur ? String(cur.name || key) : ('模板 ' + (tplNames().length + 1));
+    const fields = (cur ? (cur.fields || []) : tplFields()).join('\n');
+    const body =
+        '<div class="dna-modal-row"><label>模板名</label>' +
+        '<input type="text" class="st-chatu8-text-input" data-tf="name" value="' + esc(tname) + '"></div>' +
+        '<div class="dna-modal-field"><label>字段（一行一个，按这个顺序输出；姓名必须第一个）</label>' +
+        '<textarea class="st-chatu8-edit-input dna-mono" data-tf="fields" rows="14">' + esc(fields) + '</textarea></div>' +
+        '<div class="dna-modal-tip">想加「所属势力」「身高」这种字段就每行写一个名字；改名、调顺序、删字段都在这里改。' +
+        '模板只决定<b>有哪些字段</b>，每个字段怎么写、JSON 长什么样由上下文预设里的提示词决定。</div>' +
+        '<div class="dna-hint-warn"><i class="fa-solid fa-triangle-exclamation"></i> ' + TPL_SYNC_NOTE + '</div>' +
+        '<div class="st-chatu8-edit-buttons dna-modal-foot">' +
+        '<button type="button" class="st-chatu8-edit-button cancel" data-modal-cancel>取消</button>' +
+        '<button type="button" class="st-chatu8-edit-button send" data-modal-save>保存模板</button></div>';
+    dnaModalOpen(isNew ? '新建档案模板' : '编辑档案模板', body);
+    dnaModalWire((mask) => {
+        try {
+            const nmIn = mask.querySelector('[data-tf="name"]');
+            const fdIn = mask.querySelector('[data-tf="fields"]');
+            const nm = String((nmIn && nmIn.value) || '').trim();
+            const fd = String((fdIn && fdIn.value) || '');
+            const t = normalizeTemplate({ name: nm || tname, fields: fd }, '未命名模板');
+            S.dnaTemplates = S.dnaTemplates || {};
+            if (S.dnaTemplates[t.name] && (!cur || t.name !== key)) {
+                toast('已经有同名模板「' + t.name + '」，换个名字');
+                return;
+            }
+            if (cur && key && key !== t.name) delete S.dnaTemplates[key];
+            S.dnaTemplates[t.name] = t;
+            S.dnaTemplate = t.name;
+            saveSettings(true);
+            renderTemplateUI();
+            dnaModalClose();
+            log('保存档案模板：' + t.name + '（' + t.fields.length + ' 个字段）');
+            toast('已保存模板「' + t.name + '」，记得同步改上下文预设');
+        } catch (e) {
+            toast('保存失败：' + (e && e.message ? e.message : e), 'error');
+        }
+    });
+}
+
+function onTplNew() {
+    openTplEditor('');
+}
+
+/* 内置默认模板不让直接改：复制一份出来编辑 */
+function onTplEdit() {
+    if (tplIsDefault()) {
+        if (!confirm('「默认模板」是内置的，不能直接改。要复制一份出来编辑吗？')) return;
+        openTplEditor('');
+        return;
+    }
+    openTplEditor(S.dnaTemplate);
 }
 
 /* ------------------------------ 导入 / 导出 ------------------------------ */
@@ -5716,7 +6578,7 @@ function boot() {
     installSendHooks();
     setTimeout(installSendHooks, 5000);
     setTimeout(installSendHooks, 20000);
-    log('角色DNA记录器已加载 v2.9.9 · 融合版（内置存储 + 上下文预设）');
+    log('角色DNA记录器已加载 v2.9.18 · 融合版（内置存储 + 上下文预设）');
 }
 
 /* 智绘姬重载页签内容时会把我们的页签冲掉，这里兜底重新挂载 */

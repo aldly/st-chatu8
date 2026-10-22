@@ -608,6 +608,20 @@
     cursor: not-allowed;
 }
 
+/* 字段小锁：锁住的那个字段整行淡一点、边框变虚线，一眼看出「这段不会变」 */
+#st-chatu8-settings #dna-tab .dna-field.is-fieldlocked .dna-field-v {
+    opacity: 0.72;
+    border-style: dashed;
+}
+
+#st-chatu8-settings #dna-tab .dna-field.is-fieldlocked .dna-field-h {
+    color: var(--st-chatu8-warn-color, #f0b429);
+}
+
+#st-chatu8-settings #dna-tab .dna-field-h .dna-mini-lock {
+    margin-left: 2px;
+}
+
 /* AI 回复（实时）的状态徽章 */
 #st-chatu8-settings #dna-tab .dna-badge-live {
     border-color: var(--dna-accent-line);
@@ -1031,10 +1045,34 @@
 }
 
 #st-chatu8-settings #dna-tab.dna-mobile .dna-entry {
-    padding: 15px 14px;
-    min-height: 54px;
-    gap: 12px;
-    font-size: 0.95rem;
+    padding: 7px 10px;
+    min-height: 36px;
+    gap: 8px;
+    font-size: 0.76rem;
+}
+
+/* 手机上条目名太长会被省略号截掉、看不全，这里改成能换行 + 字号缩小 */
+#st-chatu8-settings #dna-tab.dna-mobile .dna-entry-name {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    line-height: 1.3;
+    word-break: break-word;
+    font-size: 0.76rem;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-entry-len {
+    font-size: 0.64rem;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-entry-item {
+    margin-bottom: 6px;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-entries .dna-eye {
+    width: 28px;
+    height: 28px;
+    font-size: 0.7rem;
 }
 
 #st-chatu8-settings #dna-tab.dna-mobile .dna-entry input[type="checkbox"] {
@@ -1043,7 +1081,7 @@
 }
 
 #st-chatu8-settings #dna-tab.dna-mobile .dna-entries {
-    max-height: 46vh;
+    max-height: 54vh;
 }
 
 #st-chatu8-settings #dna-tab.dna-mobile .dna-log {
@@ -1419,3 +1457,96 @@
     opacity: 0.5;
     margin-left: 6px;
 }
+
+/* ==========================================================================
+   世界书条目行的小眼睛（手动生成 ①）
+   ========================================================================== */
+#st-chatu8-settings #dna-tab .dna-eye {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.82rem;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--st-chatu8-text-secondary, inherit);
+    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.4));
+    background: transparent;
+    transition: all 0.16s;
+}
+
+#st-chatu8-settings #dna-tab .dna-eye:hover {
+    color: var(--st-chatu8-text-highlight, #fff);
+    background: var(--st-chatu8-accent-primary, #3b82f6);
+    border-color: var(--st-chatu8-accent-primary, #3b82f6);
+}
+
+/* 悬浮窗里那行来源说明 */
+.st-chatu8-edit-backdrop .dna-modal-meta {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--st-chatu8-text-secondary, #a9b1ba);
+    margin-bottom: 10px;
+    word-break: break-all;
+}
+
+/* 分段下拉：段号后面那串字长了要能截 */
+#st-chatu8-settings #dna-tab [data-dna="genTxtPart"] {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+/* ---------- 折叠：标题行就是列表头（世界书条目这类带工具按钮的） ---------- */
+#st-chatu8-settings #dna-tab .dna-entry-head.dna-fold-head {
+    margin: 16px 0 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.3));
+}
+
+#st-chatu8-settings #dna-tab .dna-fold.dna-folded > .dna-entry-head.dna-fold-head {
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: none;
+}
+
+#st-chatu8-settings #dna-tab .dna-fold.dna-folded .dna-entry-head-t::after {
+    content: '（已收起）';
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.5;
+    margin-left: 6px;
+}
+
+/* 小字警告条：改模板必须同步改预设这类提醒（v2.9.15）。
+   面板里和悬浮窗里都用它，所以不加 #dna-tab 前缀。 */
+.dna-hint-warn {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin: 10px 0 0;
+    padding: 8px 11px;
+    border-radius: 7px;
+    border-left: 3px solid var(--st-chatu8-warning-color, #e0a33e);
+    background: rgba(224, 163, 62, 0.12);
+    color: var(--st-chatu8-text-primary, inherit);
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.dna-hint-warn i {
+    margin-top: 3px;
+    opacity: 0.85;
+    flex: none;
+}
+
+/* 档案列表里名字后面的别称（小名 / 外号） */
+.dna-item-alias {
+    margin-left: 6px;
+    font-size: 0.72rem;
+    color: var(--SmartThemeQuoteColor, #9aa4b2);
+    opacity: 0.9;
+    white-space: nowrap;
+}
+.dna-mobile .dna-item-alias { font-size: 0.66rem; margin-left: 4px; }

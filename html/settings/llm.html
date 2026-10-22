@@ -159,12 +159,15 @@
         </p>
     </div>
 
-    <div class="st-chatu8-settings-section">
-        <!-- OpenAI 模型参数 -->
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <h4 style="margin: 0;">模型参数</h4>
-            <span style="font-size: 12px; color: var(--st-chatu8-text-secondary);">可单独开启/关闭每个参数（关闭后请求不携带该字段）</span>
+    <div class="st-chatu8-settings-section st-chatu8-collapsible-section" data-section-id="llm_model_params">
+        <div class="st-chatu8-section-header">
+            <h4 class="st-chatu8-section-title"><i class="fa-solid fa-sliders"></i> 模型参数</h4>
+            <span class="st-chatu8-section-toggle">
+                <i class="fa-solid fa-chevron-down st-chatu8-section-toggle-icon"></i>
+            </span>
         </div>
+        <div class="st-chatu8-section-body">
+            <p style="font-size: 12px; color: var(--st-chatu8-text-secondary); margin: 0 0 8px;">可单独开启/关闭每个参数（关闭后请求不携带该字段）</p>
         <div class="st-chatu8-grid">
             <div class="st-chatu8-field" id="ch-llm_temperature_field">
                 <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
@@ -208,6 +211,7 @@
                         data-for="ch-llm_max_tokens" min="1" max="30000" step="1" value="512">
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -385,9 +389,14 @@
         </div>
     </div>
 
-    <div class="st-chatu8-settings-section">
-        <!-- 上下文配置 -->
-        <h4>上下文配置</h4>
+    <div class="st-chatu8-settings-section st-chatu8-collapsible-section" data-section-id="llm_ctx_config">
+        <div class="st-chatu8-section-header">
+            <h4 class="st-chatu8-section-title"><i class="fa-solid fa-layer-group"></i> 上下文配置</h4>
+            <span class="st-chatu8-section-toggle">
+                <i class="fa-solid fa-chevron-down st-chatu8-section-toggle-icon"></i>
+            </span>
+        </div>
+        <div class="st-chatu8-section-body">
         <div class="st-chatu8-field">
             <label for="ch-test_context_select">上下文预设</label>
             <div class="st-chatu8-profile-controls">
@@ -424,11 +433,17 @@
         <div id="ch-preset-entries-container" class="st-chatu8-preset-entries-container">
             <!-- 条目将由 JS 动态生成 -->
         </div>
+        </div>
     </div>
 
-    <div class="st-chatu8-settings-section">
-        <!-- 上下文历史配置 -->
-        <h4>上下文历史</h4>
+    <div class="st-chatu8-settings-section st-chatu8-collapsible-section" data-section-id="llm_ctx_history">
+        <div class="st-chatu8-section-header">
+            <h4 class="st-chatu8-section-title"><i class="fa-solid fa-clock-rotate-left"></i> 上下文历史</h4>
+            <span class="st-chatu8-section-toggle">
+                <i class="fa-solid fa-chevron-down st-chatu8-section-toggle-icon"></i>
+            </span>
+        </div>
+        <div class="st-chatu8-section-body">
         <div class="st-chatu8-field">
             <label for="ch-llm_history_depth">发送历史层数</label>
             <div class="st-chatu8-range-container">
@@ -473,6 +488,7 @@
         <p style="font-size: 12px; color: var(--st-chatu8-text-secondary); margin-top: 8px;">
             当 LLM 返回空响应、429 等网络错误或标签格式解析失败时，自动重试的次数（每次间隔 1.5~2 秒）。0 表示不重试。
         </p>
+        </div>
     </div>
 
     <div class="st-chatu8-settings-section">
