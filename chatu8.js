@@ -106377,19 +106377,6 @@ function showClickActionBubble(point, targetElement) {
         handlePromptRequest(targetElement, "gesture1");
       }
     },
-    dnaGen: {
-      text: "\u6863\u6848\u751F\u6210",
-      icon: "fa-solid fa-dna",
-      description: "\u6309\u5F53\u524D\u6B63\u6587\u751F\u6210 / \u66F4\u65B0\u89D2\u8272 DNA \u6863\u6848\uFF08\u7B49\u4E8E\u81EA\u52A8\u8BB0\u5F55\u8DD1\u4E00\u8F6E\uFF09",
-      action: () => {
-        console.log("[\u70B9\u51FB\u89E6\u53D1] \u89E6\u53D1\u6863\u6848\u751F\u6210");
-        if (typeof globalThis.__dnaAutoScan === "function") {
-          globalThis.__dnaAutoScan();
-        } else if (typeof toastr !== "undefined") {
-          toastr.warning("\u89D2\u8272DNA \u8BB0\u5F55\u5668\u6CA1\u52A0\u8F7D\uFF0C\u751F\u6210\u4E0D\u4E86\u6863\u6848");
-        }
-      }
-    },
     visualPrep: {
       text: "\u89C6\u6750\u51C6\u5907",
       icon: "fa-solid fa-photo-film",
@@ -106415,6 +106402,26 @@ function showClickActionBubble(point, targetElement) {
       action: () => {
         console.log("[\u70B9\u51FB\u89E6\u53D1] \u89E6\u53D1\u4EBA\u8BBE\u751F\u6210");
         handlePersonaGenFromClick(targetElement);
+      }
+    },
+    dnaRecord: {
+      text: "\u6863\u6848\u751F\u6210",
+      icon: "fa-solid fa-dna",
+      description: "\u628A\u8FD9\u4E00\u5C42\u7684\u6B63\u6587\u4EA4\u7ED9\u300C\u89D2\u8272 DNA \u8BB0\u5F55\u5668\u300D\uFF0C\u751F\u6210\u6216\u66F4\u65B0\u89D2\u8272\u6863\u6848",
+      action: () => {
+        console.log("[\u70B9\u51FB\u89E6\u53D1] \u89E6\u53D1\u6863\u6848\u751F\u6210");
+        /* 角色 DNA 记录器是独立扩展，通过它在 window 上暴露的入口调用 */
+        if (typeof window.__DNA_RECORD_FLOOR__ !== "function") {
+          toastr.warning("\u6CA1\u6709\u68C0\u6D4B\u5230\u300C\u89D2\u8272 DNA \u8BB0\u5F55\u5668\u300D\u6269\u5C55\uFF0C\u8BF7\u5148\u542F\u7528\u5B83");
+          return;
+        }
+        const mesEl = targetElement && targetElement.closest ? targetElement.closest(".mes") : null;
+        const rawId = mesEl ? mesEl.getAttribute("mesid") : null;
+        const floor = (rawId == null || rawId === "") ? NaN : Number(rawId);
+        const ok = window.__DNA_RECORD_FLOOR__(Number.isFinite(floor) ? floor : null);
+        if (ok) {
+          toastr.info(Number.isFinite(floor) ? ("\u6B63\u5728\u751F\u6210\u7B2C " + floor + " \u5C42\u7684\u6863\u6848\u2026") : "\u6B63\u5728\u751F\u6210\u6700\u8FD1\u4E00\u5C42\u7684\u6863\u6848\u2026");
+        }
       }
     },
     deleteUnlocked: {
@@ -106498,9 +106505,9 @@ function showClickActionBubble(point, targetElement) {
     if (pageNumber === 1) {
       buttonsToRender = [
         allActions.imageGen,
-        allActions.dnaGen,
         allActions.visualPrep,
         allActions.charDesign,
+        allActions.dnaRecord,
         {
           text: "\u4E0B\u4E00\u9875",
           icon: "fa-solid fa-arrow-right",
