@@ -253,6 +253,15 @@
     color: var(--st-chatu8-text-secondary, inherit);
 }
 
+/* 档案库徽章：按存档分库之后名字会变长，别让它把整行撑开 */
+#st-chatu8-settings #dna-tab .dna-badge[data-dna="cardLabel"] {
+    max-width: 52%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
 #st-chatu8-settings #dna-tab .dna-hint {
     font-size: 0.86rem;
     line-height: 1.6;
@@ -272,6 +281,60 @@
 #st-chatu8-settings #dna-tab .dna-hint-inline {
     margin: 0;
     font-size: 0.82rem;
+}
+
+/* ---------- 说明文字删掉之后的收口 ---------- */
+
+/* 状态位留空时不再撑出一段空白（saveHint、预设提示、uiState 这些是运行时写进去的） */
+#st-chatu8-settings #dna-tab .dna-hint:empty {
+    display: none;
+}
+
+#st-chatu8-settings #dna-tab .dna-status-row {
+    margin-bottom: 10px;
+}
+
+#st-chatu8-settings #dna-tab .dna-status-row .dna-hint-inline {
+    color: var(--st-chatu8-text-secondary, inherit);
+    opacity: 0.85;
+}
+
+/* 只剩标题的整块（「手动生成 DNA」）不套卡片，当分组标题用 */
+#st-chatu8-settings #dna-tab .dna-block-head {
+    margin: 0 0 16px;
+    padding: 0;
+    background: none;
+    border: none;
+}
+
+#st-chatu8-settings #dna-tab .dna-block-head h3 {
+    margin: 0;
+}
+
+/* 标题行里并排的开关 */
+#st-chatu8-settings #dna-tab .dna-switch-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 0.92rem;
+    color: var(--st-chatu8-text-primary, inherit);
+    cursor: pointer;
+}
+
+#st-chatu8-settings #dna-tab .dna-switch-row > .st-chatu8-toggle {
+    margin: 0;
+    flex: 0 0 auto;
+}
+
+#st-chatu8-settings #dna-tab .dna-switch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 8px 24px;
+}
+
+#st-chatu8-settings #dna-tab .dna-sec-actions .dna-hint-inline {
+    margin: 0 4px 0 0;
 }
 
 #st-chatu8-settings #dna-tab .dna-row {
@@ -606,6 +669,113 @@
 #st-chatu8-settings #dna-tab .dna-mini-dis {
     opacity: 0.45;
     cursor: not-allowed;
+}
+
+/* 档案库搜索框：输入即筛列表，不改档案 */
+#st-chatu8-settings #dna-tab .dna-search-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 8px;
+}
+
+#st-chatu8-settings #dna-tab .dna-search-ico {
+    flex: 0 0 auto;
+    opacity: 0.6;
+    font-size: 0.85rem;
+}
+
+#st-chatu8-settings #dna-tab input.dna-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    padding: 4px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--dna-accent-line);
+    background: var(--st-chatu8-bg-primary, rgba(0, 0, 0, 0.15));
+    color: inherit;
+    font-size: 0.85rem;
+}
+
+#st-chatu8-settings #dna-tab input.dna-search::placeholder {
+    color: var(--st-chatu8-text-secondary, inherit);
+    opacity: 0.75;
+}
+
+#st-chatu8-settings #dna-tab input.dna-search:focus {
+    outline: none;
+    border-color: var(--dna-accent);
+    box-shadow: 0 0 0 2px var(--dna-accent-glow);
+}
+
+#st-chatu8-settings #dna-tab .dna-search-clear {
+    flex: 0 0 auto;
+    padding: 3px 9px;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-search-row {
+    gap: 4px;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile input.dna-search {
+    font-size: 0.9rem;
+}
+
+/* 强制发送：勾上之后不看正文提没提到，每次请求都把这个角色发给 LLM。
+   列表里用一个小勾选框，勾上时整行左侧加一条金色细线，一眼看出「这条必发」。 */
+#st-chatu8-settings #dna-tab .dna-force {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px 1px 3px;
+    border-radius: 5px;
+    border: 1px solid transparent;
+    font-size: 0.72rem;
+    line-height: 1.7;
+    color: var(--st-chatu8-text-secondary, inherit);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+
+#st-chatu8-settings #dna-tab .dna-force input {
+    margin: 0;
+    width: 13px;
+    height: 13px;
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+
+#st-chatu8-settings #dna-tab .dna-force:hover {
+    border-color: var(--dna-warn-line);
+}
+
+#st-chatu8-settings #dna-tab .dna-force.is-on {
+    color: var(--st-chatu8-warn-color, #f0b429);
+    border-color: var(--dna-warn-line);
+    background: var(--dna-warn-soft);
+    font-weight: 600;
+}
+
+#st-chatu8-settings #dna-tab .dna-item-force {
+    box-shadow: inset 2px 0 0 var(--dna-warn-line);
+}
+
+#st-chatu8-settings #dna-tab .dna-item-active .dna-force {
+    color: inherit;
+}
+
+#st-chatu8-settings #dna-tab .dna-item-active .dna-force.is-on {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.18);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+#st-chatu8-settings #dna-tab .dna-mini-force.is-on {
+    color: var(--st-chatu8-warn-color, #f0b429);
+    border-color: var(--dna-warn-line);
+    background: var(--dna-warn-soft);
 }
 
 /* 字段小锁：锁住的那个字段整行淡一点、边框变虚线，一眼看出「这段不会变」 */
@@ -1008,6 +1178,20 @@
     padding: 12px;
 }
 
+/* 手机版：强制发送只留勾选框，省地方 */
+#st-chatu8-settings #dna-tab.dna-mobile .dna-force {
+    padding: 2px 4px;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-force span {
+    display: none;
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-force input {
+    width: 16px;
+    height: 16px;
+}
+
 #st-chatu8-settings #dna-tab.dna-mobile .dna-field-v {
     max-height: 34vh;
 }
@@ -1269,6 +1453,49 @@
 /* 建档失败：红色 */
 .dna-banner-err {
     background: linear-gradient(135deg, #b91c1c, #ef4444);
+}
+
+/* 字幕上的「停止」按钮：只有请求在跑（run）时才出现，点一下中断这一轮生成。
+   .dna-banner 整体是 pointer-events:none，按钮必须自己放开，不然点不到。 */
+.dna-banner-stop {
+    display: none;
+    align-items: center;
+    gap: 5px;
+    margin-left: 4px;
+    padding: 3px 11px;
+    border: 1px solid rgba(255, 255, 255, 0.42);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    color: inherit;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    line-height: 1.5;
+    cursor: pointer;
+    pointer-events: auto;
+    transition: background 0.15s ease, transform 0.12s ease, opacity 0.15s ease;
+}
+
+.dna-banner-stop.dna-banner-stop-on {
+    display: inline-flex;
+}
+
+.dna-banner-stop i {
+    font-size: 0.78rem;
+    opacity: 0.95;
+}
+
+.dna-banner-stop:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.dna-banner-stop:active:not(:disabled) {
+    transform: scale(0.94);
+}
+
+.dna-banner-stop:disabled {
+    opacity: 0.5;
+    cursor: default;
 }
 
 @keyframes dna-banner-breathe {
@@ -1550,3 +1777,164 @@
     white-space: nowrap;
 }
 .dna-mobile .dna-item-alias { font-size: 0.66rem; margin-left: 4px; }
+
+/* ---------- 同人区：资料库列表 ---------- */
+#st-chatu8-settings #dna-tab .dna-fan-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 380px;
+    overflow-y: auto;
+    padding: 4px;
+    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.3));
+    border-radius: 8px;
+    background: var(--st-chatu8-bg-secondary, rgba(128, 128, 128, 0.08));
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 2px 2px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.12));
+    font-size: 0.78rem;
+    transition: border-color 0.16s, background 0.16s;
+}
+
+/* 勾选那一半（原来的整行），点它就是选/不选 */
+#st-chatu8-settings #dna-tab .dna-fan-pick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 2px 4px;
+    cursor: pointer;
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-edit {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--SmartThemeQuoteColor, #9aa4b2);
+    font-size: 0.72rem;
+    cursor: pointer;
+    opacity: 0.55;
+    transition: opacity 0.16s, border-color 0.16s, color 0.16s;
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-item:hover .dna-fan-edit {
+    opacity: 1;
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-edit:hover {
+    border-color: var(--st-chatu8-accent-secondary, rgba(128, 128, 128, 0.6));
+    color: var(--st-chatu8-accent-primary, #3b82f6);
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-item.is-own {
+    border-left: 2px solid var(--st-chatu8-accent-secondary, #3b82f6);
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-item:hover {
+    border-color: var(--st-chatu8-accent-secondary, rgba(128, 128, 128, 0.6));
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-item.is-on {
+    border-color: var(--st-chatu8-accent-primary, #3b82f6);
+    background: color-mix(in srgb, var(--st-chatu8-accent-primary, #3b82f6) 18%, transparent);
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-item input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    flex: 0 0 auto;
+    accent-color: var(--st-chatu8-accent-primary, #3b82f6);
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-work,
+#st-chatu8-settings #dna-tab .dna-fan-tag {
+    flex: 0 1 auto;
+    max-width: 34%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.7rem;
+    color: var(--SmartThemeQuoteColor, #9aa4b2);
+    opacity: 0.85;
+}
+
+#st-chatu8-settings #dna-tab .dna-fan-empty {
+    padding: 10px 8px;
+    font-size: 0.76rem;
+    color: var(--SmartThemeQuoteColor, #9aa4b2);
+}
+
+#st-chatu8-settings #dna-tab.dna-mobile .dna-fan-work,
+#st-chatu8-settings #dna-tab.dna-mobile .dna-fan-tag {
+    display: none;
+}
+
+/* ---- 开关（v2.10.11）：input 原来是 0×0 透明，wrapper 又不是 <label>，点滑块完全没反应。
+   这里把 input 铺满整个开关（仍在最上层），原生点击就能翻转，键盘也能 Tab 到。 ---- */
+#st-chatu8-settings #dna-tab .st-chatu8-toggle {
+    position: relative;
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-toggle > input[type="checkbox"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 3;
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-toggle > input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-field > label,
+#st-chatu8-settings #dna-tab .dna-field > label {
+    cursor: pointer;
+}
+
+/* ---- 开关视觉（v2.10.13）：外观只看 .is-on 类，点了立刻变，不必刷新页面 ----
+   原来的开/关是 input:checked + 同级 span 画出来的，只要点击没真正落到 input 上，
+   值变了样子不变（得刷新重画）。现在 JS 每次翻转都会同步这个类。 ---- */
+#st-chatu8-settings #dna-tab .st-chatu8-toggle.is-on > .st-chatu8-slider {
+    background-color: var(--st-chatu8-accent-primary);
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-toggle.is-on > .st-chatu8-slider:before {
+    transform: translateX(22px);
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-toggle:not(.is-on) > .st-chatu8-slider {
+    background-color: var(--st-chatu8-bg-tertiary);
+}
+
+#st-chatu8-settings #dna-tab .st-chatu8-toggle:not(.is-on) > .st-chatu8-slider:before {
+    transform: none;
+}
+

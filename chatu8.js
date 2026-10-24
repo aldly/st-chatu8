@@ -106377,6 +106377,19 @@ function showClickActionBubble(point, targetElement) {
         handlePromptRequest(targetElement, "gesture1");
       }
     },
+    dnaGen: {
+      text: "\u6863\u6848\u751F\u6210",
+      icon: "fa-solid fa-dna",
+      description: "\u6309\u5F53\u524D\u6B63\u6587\u751F\u6210 / \u66F4\u65B0\u89D2\u8272 DNA \u6863\u6848\uFF08\u7B49\u4E8E\u81EA\u52A8\u8BB0\u5F55\u8DD1\u4E00\u8F6E\uFF09",
+      action: () => {
+        console.log("[\u70B9\u51FB\u89E6\u53D1] \u89E6\u53D1\u6863\u6848\u751F\u6210");
+        if (typeof globalThis.__dnaAutoScan === "function") {
+          globalThis.__dnaAutoScan();
+        } else if (typeof toastr !== "undefined") {
+          toastr.warning("\u89D2\u8272DNA \u8BB0\u5F55\u5668\u6CA1\u52A0\u8F7D\uFF0C\u751F\u6210\u4E0D\u4E86\u6863\u6848");
+        }
+      }
+    },
     visualPrep: {
       text: "\u89C6\u6750\u51C6\u5907",
       icon: "fa-solid fa-photo-film",
@@ -106485,6 +106498,7 @@ function showClickActionBubble(point, targetElement) {
     if (pageNumber === 1) {
       buttonsToRender = [
         allActions.imageGen,
+        allActions.dnaGen,
         allActions.visualPrep,
         allActions.charDesign,
         {
