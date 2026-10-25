@@ -847,6 +847,36 @@
     border-color: var(--st-chatu8-accent-primary, #3b82f6);
 }
 
+/* 预设条目：固定 76px 两行，照智绘姬 LLM「上下文配置」的折叠条目排——
+   第一行：开关 / 角色徽标 / 条目名称 / 字数；第二行：内容预览 + 一排图标按钮。
+   字号、按钮尺寸这些硬指标在 dna.js 的内联样式与注入样式里（不吃本文件的浏览器缓存），
+   这里只做兜底：行高钉死、文字单行省略、到头的上下移灰掉、手机上藏掉预览和字数。 */
+#st-chatu8-settings #dna-tab .dna-entry-line-preset {
+    height: 76px;
+    overflow: hidden;
+}
+
+#st-chatu8-settings #dna-tab .dna-entry-line-preset .dna-entry-name,
+#st-chatu8-settings #dna-tab .dna-entry-line-preset .st-chatu8-entry-preview {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* 到头了的上下移：第一条的上移、最后一条的下移 */
+#st-chatu8-settings #dna-tab .dna-entry-line-preset .st-chatu8-entry-actions > button:disabled,
+#st-chatu8-settings #dna-tab .dna-entry-line-preset .st-chatu8-entry-actions > button.is-off {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* 手机上第二行只留按钮：预览收起来，名字在第一行独占宽度 */
+#st-chatu8-settings #dna-tab.dna-mobile .dna-entry-line-preset .st-chatu8-entry-preview,
+#st-chatu8-settings #dna-tab.dna-mobile .dna-entry-line-preset .dna-entry-len {
+    display: none;
+}
+
 /* 就地展开的编辑器 */
 #st-chatu8-settings #dna-tab .dna-entry-editor {
     padding: 12px 16px 6px;
@@ -1134,6 +1164,7 @@
     height: 40px;
     font-size: 0.9rem;
 }
+
 
 /* 手机上子板块横排、可以左右滑，别挤成两行 */
 #st-chatu8-settings #dna-tab.dna-mobile .dna-sub-nav {
@@ -2183,3 +2214,524 @@
     padding: 8px 13px;
     font-size: 0.88rem;
 }
+
+/* ==========================================================================
+   修复（v3.1.7-dan）：手机上 DNA 悬浮窗"只显示一半"
+
+   原因：弹窗高度是按视口单位算的（dialog 85vh、textarea 50vh、rows=20），
+   而手机浏览器的 vh 取的是"地址栏收起后的大视口"：
+     · 打开弹窗时 dnaModalWire 会自动 focus 输入框 → 键盘弹出
+     · 或页面被双指缩放 / 地址栏未收起
+   此时真正能看见的高度远小于 85vh，而遮罩是 position:fixed + 100% 高、
+   place-items:center 居中，弹窗比可视区高就会上下同时溢出，
+   再被 .st-chatu8-edit-dialog 的 overflow:hidden 裁掉
+   → 标题栏和底部"关闭 / 保存"按钮一起消失，只剩中间一截 = 只显示一半。
+
+   修法：高度改成跟着"真实可视高度"走（100% / dvh），内容区自己滚，
+   按钮吸底常驻。
+   ========================================================================== */
+.st-chatu8-edit-backdrop.dna-modal-mask {
+    /* 显式居中：弹窗永远停在屏幕中间，内容再长也不会掉到屏幕底部 */
+    display: grid;
+    place-items: center;
+    padding: 10px;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .st-chatu8-edit-dialog {
+    box-sizing: border-box;
+    /* margin:auto 是防「贴底」的保险：万一外层被别的样式改成了 flex，
+       auto 外边距依然会把弹窗推回中间 */
+    margin: auto;
+    max-height: 100%;
+    min-height: 0;
+}
+
+@supports (max-height: 88dvh) {
+    .st-chatu8-edit-backdrop.dna-modal-mask .st-chatu8-edit-dialog {
+        max-height: min(100%, 88dvh);
+    }
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-field {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-field textarea {
+    min-height: 120px;
+    max-height: 50vh;
+    resize: vertical;
+}
+
+@supports (max-height: 50dvh) {
+    .st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-field textarea {
+        max-height: 48dvh;
+    }
+}
+
+/* 关闭 / 保存 常驻底部，内容再长也点得到 */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-foot {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 8px 0 2px;
+    background: var(--st-chatu8-bg-primary, #2c2c2c);
+    box-shadow: 0 -8px 12px -8px rgba(0, 0, 0, 0.45);
+}
+
+/* ==========================================================================
+   列表条目：勾选态的强调 —— 选中的条目左边亮一条、边框转绿，
+   跟「上下文预设」里的条目是一个观感（那几处列表共用 dnaEntryRowHtml 生成）
+   ========================================================================== */
+#st-chatu8-settings #dna-tab .dna-entry-item.is-on {
+    border-color: var(--dna-ok-line, rgba(80, 200, 120, 0.45));
+    box-shadow: inset 3px 0 0 var(--dna-ok-line, rgba(80, 200, 120, 0.55));
+}
+
+#st-chatu8-settings #dna-tab .dna-lib-row {
+    transition: border-color 0.16s, box-shadow 0.16s, background-color 0.16s;
+}
+
+#st-chatu8-settings #dna-tab .dna-lib-row:hover {
+    border-color: var(--st-chatu8-accent-secondary, rgba(128, 128, 128, 0.6));
+}
+
+/* ==========================================================================
+   弹窗（查看 / 编辑）：外壳沿用本体的 .st-chatu8-edit-*，
+   这里把标题栏、字段、分节、底部按钮再收拾一遍。
+   选择器都带 .dna-modal-mask，只作用于 DNA 自己的弹窗。
+   ========================================================================== */
+.st-chatu8-edit-backdrop.dna-modal-mask .st-chatu8-edit-dialog {
+    border-radius: 12px;
+    box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.65),
+        0 0 0 1px var(--st-chatu8-border-color, rgba(128, 128, 128, 0.25));
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 32px 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border-bottom: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.22));
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-tname {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-ticon {
+    flex: 0 0 auto;
+    font-size: 0.9rem;
+    color: var(--st-chatu8-accent-primary, #3b82f6);
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--st-chatu8-text-secondary, inherit);
+}
+
+/* 字段名前面一小条亮色，视线好找 */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b label::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: var(--st-chatu8-accent-primary, #3b82f6);
+    opacity: 0.8;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b .st-chatu8-text-input,
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b .st-chatu8-textarea,
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b .st-chatu8-edit-input {
+    border-radius: 8px;
+    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.14));
+    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.35));
+    transition: border-color 0.16s, box-shadow 0.16s;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b .st-chatu8-text-input:focus,
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b .st-chatu8-textarea:focus,
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-b .st-chatu8-edit-input:focus {
+    outline: none;
+    border-color: var(--st-chatu8-accent-primary, #3b82f6);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* 弹窗里的分节标题（基本信息 / 生图用 / 资料正文） */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-sec {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 14px 0 10px;
+    padding-bottom: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--st-chatu8-accent-primary, #3b82f6);
+    border-bottom: 1px dashed var(--st-chatu8-border-color, rgba(128, 128, 128, 0.28));
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-sec:first-child {
+    margin-top: 4px;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-sec i {
+    font-size: 0.78rem;
+    opacity: 0.85;
+}
+
+/* 顶部那条「来源 · 关键词 · 字数」的信息带 */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-meta {
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.12));
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-foot {
+    margin-top: 14px;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-modal-foot .st-chatu8-edit-button.send {
+    box-shadow: 0 6px 16px -8px rgba(59, 130, 246, 0.75);
+}
+
+/* ==========================================================================
+   悬浮字幕上的「终止建档」小方格
+   字幕本体是 pointer-events:none（不占点击），按钮单独放行。
+   只在「建档中」那条横幅（.dna-banner-run）上出现，成功/失败的横幅上没有。
+   ========================================================================== */
+.dna-banner-stop {
+    flex: 0 0 auto;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: 2px;
+    padding: 0;
+    border: 1px solid rgba(255, 255, 255, 0.55);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    font-size: 0.66rem;
+    line-height: 1;
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.16s, border-color 0.16s, transform 0.12s;
+}
+
+.dna-banner-run .dna-banner-stop {
+    display: inline-flex;
+}
+
+.dna-banner-stop:hover {
+    background: rgba(255, 255, 255, 0.34);
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+.dna-banner-stop:active {
+    transform: scale(0.9);
+}
+
+/* 字幕里的图标是 1rem，按钮里这个要小一号 */
+.dna-banner-stop i {
+    font-size: 0.66rem;
+    pointer-events: none;
+}
+
+/* ==========================================================================
+   别称禁词（档案库页签最下面那块）
+   一排小标签，每个右边一个 × 直接删；下面是「输入框 + 添加」和操作按钮行。
+   ========================================================================== */
+.dna-ban-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 6px;
+    max-height: 210px;
+    overflow-y: auto;
+    padding: 9px;
+    border: 1px solid rgba(127, 127, 127, 0.28);
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.07);
+    -webkit-overflow-scrolling: touch;
+}
+
+.dna-ban-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 100%;
+    padding: 3px 4px 3px 9px;
+    border: 1px solid rgba(239, 68, 68, 0.26);
+    border-radius: 7px;
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--SmartThemeBodyColor, #e8eaed);
+    font-size: 0.8rem;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.dna-ban-x {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: rgba(239, 68, 68, 0.85);
+    font-size: 0.9rem;
+    line-height: 1;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 0.15s, color 0.15s;
+}
+
+.dna-ban-x:hover {
+    background: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+.dna-ban-add {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.dna-ban-add .st-chatu8-text-input {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.dna-ban-add .st-chatu8-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+/* ==========================================================================
+   档案模板：下拉框 + 锁 同一行
+   锁是按角色卡（会话）记的：点一下锁住这张卡的模板，再点一下解锁。
+   ========================================================================== */
+.dna-tpl-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.dna-tpl-row .st-chatu8-select {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* 锁住后下拉框变灰，不能从这儿改 */
+.dna-tpl-row .st-chatu8-select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+.dna-tpl-lock {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.dna-tpl-lock.is-locked {
+    border-color: rgba(240, 180, 41, 0.7);
+    color: var(--dna-warn, #f0b429);
+    background: rgba(240, 180, 41, 0.12);
+}
+
+/* 自动生成那块「当前预设」下拉旁边的锁：只放图标，省地方 */
+.dna-tpl-lock-icon {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    min-width: 36px;
+    padding: 0;
+}
+
+/* ==========================================================================
+   档案编辑器（点列表里的铅笔弹出来的那个小窗）
+   名字 + 所有字段一次改完，字段多就在弹窗里滚。
+   ========================================================================== */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-rec-field textarea {
+    min-height: 84px;
+    max-height: 30vh;
+    resize: vertical;
+}
+
+/* 弹窗里的字段锁：弹窗挂在 body 上、不在 #dna-tab 里，
+   .dna-mini 那套选择器够不到它（会退化成一个没样式的白块），
+   所以这里单独给一份跟详情面板完全一致的外观 */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-rec-lock {
+    flex: 0 0 auto;
+    margin-left: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    border-radius: 5px;
+    cursor: pointer;
+    color: inherit;
+    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.4));
+    background: transparent;
+    transition: background 0.16s, color 0.16s, border-color 0.16s;
+}
+
+/* 图标字体显式写一遍：万一 FontAwesome 那条全局规则在弹窗里被盖掉，
+   图标也不会变成空心方块 */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-rec-lock > i {
+    font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", "FontAwesome", sans-serif;
+    font-weight: 900;
+    font-style: normal;
+    font-size: 0.72rem;
+    line-height: 1;
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-rec-lock:hover {
+    background: var(--st-chatu8-bg-tertiary, rgba(128, 128, 128, 0.22));
+}
+
+/* 锁上：金色高亮，跟列表里那把锁一个观感 */
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-rec-lock.is-locked {
+    color: var(--st-chatu8-warn-color, #f0b429);
+    border-color: var(--dna-warn-line, rgba(240, 180, 41, 0.5));
+    background: rgba(240, 180, 41, 0.12);
+}
+
+.st-chatu8-edit-backdrop.dna-modal-mask .dna-rec-locktag {
+    margin-left: 6px;
+    font-weight: 500;
+    font-size: 0.74rem;
+    opacity: 0.75;
+}
+
+.dna-rec-field.is-locked textarea {
+    opacity: 0.65;
+    cursor: not-allowed;
+}
+
+/* ==========================================================================
+   档案模板 · 「发送给 AI 的字段」勾选
+   勾上的才发。卡片照抄「上下文预设」那些条目（6px 圆角、卡片底、选中转绿 + 左边亮一条），
+   开关用本体那套滑块组件，跟预设条目里的开关一模一样。
+   ========================================================================== */
+#st-chatu8-settings #dna-tab .dna-sendfields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+#st-chatu8-settings #dna-tab .dna-sendfield {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+    padding: 5px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--st-chatu8-border-color, rgba(128, 128, 128, 0.3));
+    background: var(--st-chatu8-bg-secondary, rgba(128, 128, 128, 0.1));
+    transition: border-color 0.16s, background 0.16s, box-shadow 0.16s;
+}
+
+#st-chatu8-settings #dna-tab .dna-sendfield:hover {
+    border-color: var(--st-chatu8-accent-secondary, rgba(128, 128, 128, 0.6));
+}
+
+/* 选中的：边框转绿 + 左边亮一条，跟列表里选中的条目一个观感 */
+#st-chatu8-settings #dna-tab .dna-sendfield.is-on {
+    border-color: var(--dna-ok-line, rgba(80, 200, 120, 0.45));
+    box-shadow: inset 3px 0 0 var(--dna-ok-line, rgba(80, 200, 120, 0.55));
+}
+
+/* 没勾的字段名暗下去（跟预设条目未选中时同一个透明度） */
+#st-chatu8-settings #dna-tab .dna-sendfield-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    opacity: 0.45;
+    transition: opacity 0.16s;
+}
+
+#st-chatu8-settings #dna-tab .dna-sendfield.is-on .dna-sendfield-name {
+    opacity: 1;
+}
+
+/* 滑块开关本身是本体组件，只保证它不被名字挤扁 */
+#st-chatu8-settings #dna-tab .dna-sendfield .st-chatu8-entry-toggle {
+    flex: 0 0 auto;
+}
+
+/* 角色照片：一块放图的框，空的时候给个占位 */
+#st-chatu8-settings #dna-tab .dna-photo-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    margin-top: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px dashed var(--SmartThemeBorderColor, rgba(128,128,128,.35));
+    background: var(--SmartThemeBlurTintColor, rgba(128,128,128,.06));
+}
+#st-chatu8-settings #dna-tab .dna-photo-wrap img {
+    max-width: 100%;
+    max-height: 420px;
+    border-radius: 8px;
+    object-fit: contain;
+}
+#st-chatu8-settings #dna-tab .dna-photo-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: .5;
+    font-size: .8rem;
+}
+#st-chatu8-settings #dna-tab .dna-photo-empty i { font-size: 32px; }
