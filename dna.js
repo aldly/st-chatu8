@@ -3256,6 +3256,7 @@ function resolveApi(scope) {
         url,
         key: String(p.api_key || ''),
         model,
+        stream: !!p.stream,
         temperature: p.enable_temperature === false ? 1 : numOr(p.temperature, 0.8),
         maxTokens: p.enable_max_tokens === false ? 0 : numOr(p.max_tokens, 4000),
         customHeaders: apiExtras(scope).headersObj
@@ -3319,99 +3320,159 @@ function replyPower(replyMax, profileMax) {
     return profileMax > 0 ? profileMax : 0;
 }
 
-/* 读 SSE 流：边收边把累积文本回调出去。返回完整文本。
-   只认 OpenAI 的 `data: {...}` 格式；拿到内容才算成功，否则抛错让上层回退。 */
+/* 使用 TauriTavern 的稳定 Host ABI，不能仅凭通用 __TAURI__ 判断宿主。 */
+function isTauriTavern() {
+    const host = globalThis.__TAURITAVERN__;
+    return !!(host && host.abiVersion && typeof host.invoke?.safeInvoke === 'function');
+}
+
+function throwIfCancelled(signal) {
+    if (signal?.aborted) {
+        const error = new Error('已手动中断');
+        error.name = 'AbortError';
+        throw error;
+    }
+}
+
+function openAIError(message, code) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+}
+
+function openAIData(data) {
+    if (data?.error || data?.data?.error) {
+        const error = data.error || data.data.error;
+        throw openAIError('API 错误：' + String(error.message || error.type || error), 'API_ERROR');
+    }
+    return data?.data?.choices ? data.data : data;
+}
+
+/* 按 SSE 事件拼帧；只有明确结束才接受内容，断流不提交部分档案。 */
 async function readOpenAIStream(res, onDelta, signal) {
     const reader = res.body.getReader();
     const dec = new TextDecoder('utf-8');
-    let buf = '';
-    let acc = '';
-    let got = false;
-    while (true) {
-        if (signal && signal.aborted) throw new Error('已手动中断');
-        const step = await reader.read();
-        if (step.done) break;
-        buf += dec.decode(step.value, { stream: true });
-        /* SSE 一帧可能被拆成多个 chunk，按行切，最后一段留到下次 */
-        const lines = buf.split('\n');
-        buf = lines.pop() || '';
-        for (const line of lines) {
-            const t = line.trim();
-            if (!t || t.charAt(0) === ':') continue;
-            if (t.indexOf('data:') !== 0) continue;
-            const payload = t.slice(5).trim();
-            if (!payload || payload === '[DONE]') continue;
-            let j;
-            try { j = JSON.parse(payload); } catch (e) { continue; }
-            const ch = j && j.choices && j.choices[0];
-            const d = (ch && (ch.delta || ch.message)) || {};
-            let piece = d.content;
-            /* 有些兼容层把 content 拆成数组 */
-            if (Array.isArray(piece)) piece = piece.map((x) => (x && (x.text || x.content)) || '').join('');
-            if (typeof piece !== 'string' || !piece) continue;
-            got = true;
+    let buf = '', acc = '', eventData = [];
+    let ended = false;
+    function dispatch() {
+        if (!eventData.length) return;
+        const payload = eventData.join('\n');
+        eventData = [];
+        if (payload.trim() === '[DONE]') { ended = true; return; }
+        let data;
+        try { data = JSON.parse(payload); }
+        catch { throw openAIError('SSE JSON 解析失败，请关闭流式后重试', 'STREAM_JSON'); }
+        const ch = openAIData(data)?.choices?.[0];
+        const delta = ch?.delta || ch?.message || {};
+        let piece = delta.content;
+        if (Array.isArray(piece)) piece = piece.map((x) => x?.text || x?.content || '').join('');
+        if (typeof piece === 'string' && piece) {
             acc += piece;
             if (onDelta) onDelta(acc, piece);
         }
+        if (ch?.finish_reason != null) ended = true;
     }
-    if (!got) throw new Error('流式没有返回任何内容');
-    return acc;
+    function line(text) {
+        if (!text) dispatch();
+        else if (text.startsWith('data:')) eventData.push(text.slice(5).replace(/^ /, ''));
+    }
+    try {
+        while (true) {
+            throwIfCancelled(signal);
+            const step = await reader.read();
+            throwIfCancelled(signal);
+            buf += step.done ? dec.decode() : dec.decode(step.value, { stream: true });
+            const lines = buf.split(/\r?\n/);
+            buf = lines.pop() || '';
+            for (const text of lines) { line(text); if (ended) break; }
+            if (ended) break;
+            if (step.done) {
+                if (buf) line(buf.replace(/\r$/, ''));
+                dispatch();
+                break;
+            }
+        }
+        throwIfCancelled(signal);
+        if (!ended) throw openAIError('SSE 连接中断：缺少结束标记，未保存部分内容', 'STREAM_INTERRUPTED');
+        if (!acc.trim()) throw openAIError('SSE 空流：没有返回正文，请关闭流式后重试', 'STREAM_EMPTY');
+        return acc;
+    } finally {
+        try { await reader.cancel(); } catch { /* 连接可能已经断开 */ }
+        reader.releaseLock();
+    }
 }
 
 async function callOpenAI(prompt, api, signal, replyMax, onDelta) {
-    const url = openAiEndpoint(api.url, '/chat/completions');
+    const native = isTauriTavern();
+    const endpoint = openAiEndpoint(api.url, '/chat/completions');
     const plan = applyBreakthrough({}, normalizeMessages(prompt));
     const body = {
         model: api.model,
         messages: plan.messages,
-        temperature: api.temperature
+        temperature: api.temperature,
+        // iOS 统一用原生非流式；普通酒馆同时尊重配置和实时显示开关。
+        stream: !native && !!api.stream && !!onDelta && !plan.tools
     };
     if (plan.tools) { body.tools = plan.tools; body.tool_choice = plan.toolChoice; }
     const mtOut = replyPower(replyMax, api.maxTokens);
     if (mtOut > 0) body.max_tokens = mtOut;
-    /* 要实时显示时才开流式。开了自定义 Tool 的不用流式：
-       那种模式下正文在 tool_calls 里，流式分片拼起来很容易缺内容。 */
-    const wantStream = !!onDelta && !plan.tools;
-    if (wantStream) body.stream = true;
-    const res = await fetch(url, {
-        method: 'POST',
-        headers: apiHeaders(api),
-        body: JSON.stringify(body),
-        signal
-    });
-    if (!res.ok) {
-        const bad = await res.text();
-        throw new Error('HTTP ' + res.status + '：' + bad.slice(0, 300));
+    if (native) {
+        Object.assign(body, {
+            chat_completion_source: 'custom',
+            custom_api_format: 'openai_compat',
+            custom_url: endpoint.replace(/\/chat\/completions$/i, ''),
+            use_sysprompt: true,
+            // JSON 字符串也是合法 YAML；沿用智绘姬已有 Key / 自定义头，
+            // 这些头只给上游，不能覆盖本地 getRequestHeaders() 的授权。
+            // 无显式 Authorization 时原生端会复用 api_key_custom 密钥。
+            custom_include_headers: JSON.stringify(apiHeaders(api))
+        });
     }
-    /* 流式：能读就读，读不出内容就退回一次性读取（最多多发一次请求） */
-    if (wantStream && res.body && typeof res.body.getReader === 'function') {
-        try {
-            const streamed = await readOpenAIStream(res, onDelta, signal);
-            if (String(streamed).trim()) return streamed;
-        } catch (e) {
-            if (signal && signal.aborted) throw new Error('已手动中断');
-            /* 流式失败：重新发一次非流式请求，保证功能不因为流式挂掉 */
-            delete body.stream;
-            const res2 = await fetch(url, {
-                method: 'POST',
-                headers: apiHeaders(api),
-                body: JSON.stringify(body),
-                signal
-            });
-            const raw2 = await res2.text();
-            if (!res2.ok) throw new Error('HTTP ' + res2.status + '：' + raw2.slice(0, 300));
-            return finishOpenAI(raw2);
+    const route = native ? 'TauriTavern 原生非流式' : 'OpenAI 直连';
+    log('请求通道：' + route + (body.stream ? '（流式）' : '（非流式）'));
+    try {
+        throwIfCancelled(signal);
+        const res = await fetch(native ? '/api/backends/chat-completions/generate' : endpoint, {
+            method: 'POST',
+            headers: native ? getRequestHeaders() : apiHeaders(api),
+            cache: 'no-cache',
+            body: JSON.stringify(body),
+            signal
+        });
+        throwIfCancelled(signal);
+        if (!res.ok) {
+            // 不回显原始错误体：代理可能在其中带回请求头和密钥。
+            throw openAIError('HTTP ' + res.status + '：上游或本地生成接口拒绝请求', 'HTTP_ERROR');
         }
-        return '';
+        if (body.stream && /text\/event-stream/i.test(res.headers.get('content-type') || '')) {
+            if (!res.body?.getReader) throw openAIError('SSE 响应没有可读流', 'STREAM_EMPTY');
+            return await readOpenAIStream(res, onDelta, signal);
+        }
+        const raw = await res.text();
+        throwIfCancelled(signal);
+        const result = finishOpenAI(raw);
+        throwIfCancelled(signal);
+        return result;
+    } catch (error) {
+        throwIfCancelled(signal);
+        if (error?.name === 'AbortError') throw openAIError('请求被取消（宿主或网络层）', 'REQUEST_CANCELLED');
+        if (!error?.code) throw openAIError(route + '网络连接失败或中断（未收到完整响应）', 'NETWORK_ERROR');
+        // API 错误可能包含服务端回显的认证信息，显示前清除已知敏感值。
+        let message = String(error.message);
+        for (const value of [api.key, ...Object.values(api.customHeaders || {})]) {
+            if (value) message = message.split(String(value)).join('[已隐藏]');
+        }
+        message = message.replace(/Bearer\s+[^\s"',}]+/gi, 'Bearer [已隐藏]');
+        throw openAIError(message.slice(0, 500), error.code);
     }
-    const raw = await res.text();
-    return finishOpenAI(raw);
 }
 
-/* 解析 OpenAI 格式的返回（非流式）。流式拿不到内容时也走这里。 */
+/* 解析非流式响应；服务端忽略 stream 并返回 JSON 时也走这里。 */
 function finishOpenAI(raw) {
     let data;
-    try { data = JSON.parse(raw); } catch (e) { throw new Error('返回不是 JSON：' + raw.slice(0, 200)); }
+    if (!String(raw || '').trim()) throw openAIError('空响应：接口未返回任何数据', 'EMPTY_RESPONSE');
+    try { data = JSON.parse(raw); } catch { throw openAIError('响应 JSON 解析失败', 'INVALID_JSON'); }
+    data = openAIData(data);
     const ch = data && data.choices && data.choices[0];
     const msg = ch ? ch.message : null;
     const finish = String((ch && ch.finish_reason) || (ch && ch.finishReason) || '');
@@ -3427,7 +3488,8 @@ function finishOpenAI(raw) {
         if (decoded && String(decoded).trim()) return String(decoded);
     }
     let txt = msg ? msg.content : (ch ? ch.text : '');
-    if (txt && String(txt).trim()) return String(txt);
+    if (Array.isArray(txt)) txt = txt.map((x) => x?.text || x?.content || '').join('');
+    if (typeof txt === 'string' && txt.trim()) return txt;
 
     /* 空正文的几种常见情况，分别给能照着做的提示 */
     if (msg && Array.isArray(msg.tool_calls) && msg.tool_calls.length) {
@@ -3436,18 +3498,17 @@ function finishOpenAI(raw) {
     }
     if (finish === 'length') {
         const rt = usage.completion_tokens_details && usage.completion_tokens_details.reasoning_tokens;
-        throw new Error('输出被截断（finish_reason=length）：max_tokens 用完了，正文一个字都没出来'
+        throw openAIError('输出被截断（finish_reason=length）：max_tokens 用完了，正文一个字都没出来'
             + (rt ? '（其中思考占了 ' + rt + ' tokens）' : '')
             + '。请到 DNA「设置 → 运行」把「AI 回复上限」调大（建议 10000 以上），'
-            + '或把「每次扫描最近 N 层」调小再试。');
+            + '或把「每次扫描最近 N 层」调小再试。', 'OUTPUT_LIMIT');
     }
     /* 有的推理模型把正文全塞进 reasoning_content */
     if (finish !== 'length' && msg) {
         const rc = msg.reasoning_content || msg.reasoning || msg.thinking;
         if (rc && String(rc).trim()) return String(rc);
     }
-    throw new Error('返回内容为空（finish_reason=' + (finish || '未知')
-        + '，usage=' + JSON.stringify(usage) + '）：' + raw.slice(0, 300));
+    throw openAIError('返回内容为空（finish_reason=' + (finish || '未知') + '）', 'EMPTY_CONTENT');
 }
 
 async function callAnthropic(prompt, api, signal, replyMax) {
@@ -3597,11 +3658,13 @@ function retryTimes() {
 }
 
 async function callSafe(prompt, softPrompt, scope, altPrompt, replyMax, onDelta) {
-    abortSignal();          /* 本轮任务的中断控制器，按钮在这一刻才可用 */
+    const signal = abortSignal(); /* 保留本轮 signal，防止宿主在取消后仍返回成功 */
     syncAbortBtns();
     try {
         try {
-            return await callAI(prompt, scope, replyMax, onDelta);
+            const result = await callAI(prompt, scope, replyMax, onDelta);
+            throwIfCancelled(signal);
+            return result;
         } catch (e) {
             if (abortedNow()) throw new Error('已手动中断');
             const max = retryTimes();
@@ -3621,7 +3684,9 @@ async function callSafe(prompt, softPrompt, scope, altPrompt, replyMax, onDelta)
                 else if (i === 2 && altPrompt) { p = altPrompt; what = '换内置提示词'; }
                 log('自动重试 ' + i + '/' + max + '（' + what + '）……上一次：' + String((last && last.message) || last).slice(0, 120), 'error');
                 try {
-                    return await callAI(p, scope, replyMax, onDelta);
+                    const result = await callAI(p, scope, replyMax, onDelta);
+                    throwIfCancelled(signal);
+                    return result;
                 } catch (e2) {
                     if (abortedNow()) throw new Error('已手动中断');
                     last = e2;
